@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>局域网文件共享</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .container { max-width: 800px; margin: 0 auto; }
+        h1 { color: #333; }
+        .file-list { margin: 20px 0; }
+        .file-item { margin: 5px 0; }
+        a { color: #0066cc; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        .upload-box { border: 2px dashed #aaa; padding: 20px; text-align: center; margin: 20px 0; }
+        .status { font-weight: bold; margin-top: 10px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📁 局域网文件共享</h1>
+        <p>当前 IP: <strong>{{ ip }}</strong>（其他设备浏览器访问此地址）</p>
+        
+        <h2>📤 上传文件</h2>
+        <div class="upload-box">
+            <form action="/upload" method="post" enctype="multipart/form-data">
+                <input type="file" name="file" multiple />
+                <p>拖放文件到此处，或点击选择文件</p>
+                <input type="submit" value="上传" />
+            </form>
+            <div class="status" id="status"></div>
+        </div>
+
+        <h2>📥 文件列表</h2>
+        <div class="file-list">
+            {% if files %}
+                {% for file in files %}
+                    <div class="file-item">
+                        <a href="/download/{{ file }}" download>{{ file }}</a>
+                    </div>
+                {% endfor %}
+            {% else %}
+                <p>暂无文件</p>
+            {% endif %}
+        </div>
+    </div>
+</body>
+</html>
