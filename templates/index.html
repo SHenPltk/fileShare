@@ -6,99 +6,65 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 20px; background-color: #f0f2f5; color: #1c1e21; }
-        .container { max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+        .container { max-width: 900px; margin: 0 auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
         h1 { color: #1877f2; text-align: center; margin-bottom: 10px; }
-        .ip-info { text-align: center; color: #65676b; margin-bottom: 30px; font-size: 0.95em; }
+        .ip-info { text-align: center; color: #65676b; margin-bottom: 20px; font-size: 0.9em; }
         
-        .section-title { border-bottom: 2px solid #e4e6eb; padding-bottom: 10px; margin-top: 30px; margin-bottom: 20px; font-size: 1.2em; color: #4b4f56; font-weight: 600; }
+        /* 面包屑导航 */
+        .breadcrumb { margin-bottom: 20px; padding: 10px 15px; background: #f8f9fa; border-radius: 8px; font-size: 0.95em; }
+        .breadcrumb a { color: #1877f2; text-decoration: none; font-weight: 500; }
+        .breadcrumb a:hover { text-decoration: underline; }
+        .breadcrumb .separator { margin: 0 8px; color: #bec3c9; }
+        .breadcrumb .current { color: #65676b; }
+
+        .toolbar { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
         
         .upload-box { 
             border: 2px dashed #1877f2; 
-            padding: 40px; 
+            padding: 30px; 
             text-align: center; 
-            margin: 20px 0; 
+            margin-bottom: 20px; 
             border-radius: 12px;
-            transition: all 0.3s ease;
             background-color: #f7f9fc;
             position: relative;
             cursor: pointer;
         }
-        .upload-box:hover { background-color: #f0f4f9; }
-        .upload-box.dragover { 
-            background-color: #e7f3ff; 
-            border-color: #166fe5; 
-            transform: scale(1.01);
-        }
+        .upload-box.dragover { background-color: #e7f3ff; border-color: #166fe5; }
         
-        #file-input {
-            position: absolute;
-            width: 100%;
-            height: 100%;
-            top: 0;
-            left: 0;
-            opacity: 0;
-            cursor: pointer;
-            z-index: 5;
-        }
+        #file-input, #folder-input { position: absolute; width: 100%; height: 100%; top: 0; left: 0; opacity: 0; cursor: pointer; z-index: 5; display: none; }
         
-        .btn-submit {
-            background-color: #1877f2;
-            color: white;
-            border: none;
-            padding: 12px 30px;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 16px;
-            font-weight: 600;
-            transition: background-color 0.2s;
-            position: relative;
-            z-index: 10;
-            margin-top: 15px;
-        }
-        .btn-submit:hover { background-color: #166fe5; }
-        .btn-submit:disabled { background-color: #bec3c9; cursor: not-allowed; }
-        
-        .file-list { margin-top: 10px; }
+        .btn { padding: 10px 20px; border-radius: 6px; border: none; font-weight: 600; cursor: pointer; transition: all 0.2s; font-size: 14px; display: inline-flex; align-items: center; gap: 8px; }
+        .btn-primary { background-color: #1877f2; color: white; }
+        .btn-primary:hover { background-color: #166fe5; }
+        .btn-outline { background-color: white; color: #1877f2; border: 1px solid #1877f2; }
+        .btn-outline:hover { background-color: #f0f7ff; }
+        .btn-danger { background-color: #fde8e8; color: #d93025; }
+        .btn-danger:hover { background-color: #fbd5d5; }
+
+        .file-list { border: 1px solid #e4e6eb; border-radius: 8px; overflow: hidden; }
         .file-item { 
-            margin: 10px 0; 
-            padding: 15px; 
-            background: #ffffff; 
-            border: 1px solid #e4e6eb;
-            border-radius: 8px; 
+            padding: 12px 15px; 
             display: flex; 
             justify-content: space-between; 
             align-items: center;
-            transition: all 0.2s;
+            border-bottom: 1px solid #e4e6eb;
+            transition: background-color 0.2s;
         }
-        .file-item:hover { background-color: #f8f9fa; border-color: #1877f2; }
+        .file-item:last-child { border-bottom: none; }
+        .file-item:hover { background-color: #f8f9fa; }
         
-        .file-info { display: flex; align-items: center; flex-grow: 1; overflow: hidden; }
-        .file-icon { font-size: 1.5em; margin-right: 12px; }
-        .file-name { color: #050505; text-decoration: none; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .file-name:hover { color: #1877f2; text-decoration: underline; }
+        .file-info { display: flex; align-items: center; flex-grow: 1; gap: 12px; text-decoration: none; color: inherit; }
+        .file-icon { font-size: 1.4em; }
+        .file-name { font-weight: 500; color: #050505; }
+        .file-item.is-dir .file-name { color: #1877f2; }
         
-        .actions { display: flex; gap: 10px; align-items: center; margin-left: 15px; }
-        .btn-action { 
-            padding: 8px 12px; 
-            border-radius: 6px; 
-            text-decoration: none; 
-            font-size: 0.9em; 
-            font-weight: 600; 
-            cursor: pointer; 
-            transition: all 0.2s;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border: none;
-        }
-        .btn-download { background-color: #e7f3ff; color: #1877f2; }
-        .btn-download:hover { background-color: #dbeafe; }
-        .btn-delete { background-color: #fde8e8; color: #d93025; }
-        .btn-delete:hover { background-color: #fbd5d5; }
-        
-        .status { font-weight: 600; margin-top: 20px; text-align: center; min-height: 1.5em; }
-        .progress-container { width: 100%; background-color: #e4e6eb; border-radius: 10px; margin-top: 15px; display: none; overflow: hidden; }
-        .progress-bar { width: 0%; height: 12px; background-color: #28a745; transition: width 0.3s ease; }
+        .actions { display: flex; gap: 8px; }
+        .action-icon { padding: 6px; border-radius: 6px; cursor: pointer; text-decoration: none; font-size: 1.1em; }
+        .action-icon:hover { background-color: #f0f2f5; }
+
+        .status { font-weight: 600; margin-top: 15px; text-align: center; min-height: 1.5em; font-size: 0.9em; }
+        .progress-container { width: 100%; background-color: #e4e6eb; border-radius: 10px; margin-top: 10px; display: none; overflow: hidden; }
+        .progress-bar { width: 0%; height: 8px; background-color: #28a745; transition: width 0.3s ease; }
     </style>
 </head>
 <body>
@@ -106,171 +72,133 @@
         <h1>📁 局域网文件共享</h1>
         <div class="ip-info">当前 IP: <strong>{{ ip }}</strong></div>
         
-        <div class="section-title">📤 上传文件</div>
-        <div class="upload-box" id="drop-zone">
-            <input type="file" id="file-input" multiple />
-            <div id="upload-prompt">
-                <div style="font-size: 50px; margin-bottom: 10px;">☁️</div>
-                <p><strong>点击选择文件</strong> 或 <strong>将文件拖拽到此处</strong></p>
-                <p id="file-name-display" style="color: #1877f2; font-weight: bold;"></p>
-            </div>
-            <button type="button" id="start-upload" class="btn-submit">开始上传</button>
-            
-            <div class="progress-container" id="progress-container">
-                <div class="progress-bar" id="progress-bar"></div>
-            </div>
-            <div class="status" id="status"></div>
+        <!-- 面包屑导航 -->
+        <div class="breadcrumb">
+            <a href="/">🏠 根目录</a>
+            {% for crumb in breadcrumbs %}
+                <span class="separator">/</span>
+                <a href="/view/{{ crumb.path }}">{{ crumb.name }}</a>
+            {% endfor %}
         </div>
 
-        <div class="section-title">📥 文件列表</div>
+        <!-- 工具栏 -->
+        <div class="toolbar">
+            <button class="btn btn-primary" onclick="document.getElementById('file-input').click()">📄 上传文件</button>
+            <button class="btn btn-outline" onclick="document.getElementById('folder-input').click()">📁 上传文件夹</button>
+            <button class="btn btn-outline" onclick="createNewFolder()">➕ 新建文件夹</button>
+            <input type="file" id="file-input" multiple onchange="handleFiles(this.files)">
+            <input type="file" id="folder-input" webkitdirectory directory multiple onchange="handleFiles(this.files)">
+        </div>
+
+        <!-- 上传进度 -->
+        <div class="progress-container" id="progress-container">
+            <div class="progress-bar" id="progress-bar"></div>
+        </div>
+        <div class="status" id="status"></div>
+
+        <!-- 文件列表 -->
         <div class="file-list">
-            {% if files %}
-                {% for file in files %}
-                    <div class="file-item">
-                        <div class="file-info">
-                            <span class="file-icon">📄</span>
-                            <a href="/download/{{ file }}" class="file-name" title="{{ file }}">{{ file }}</a>
-                        </div>
+            {% if current_path %}
+                <div class="file-item">
+                    <a href="/view/{{ current_path.rsplit('/', 1)[0] if '/' in current_path else '' }}" class="file-info">
+                        <span class="file-icon">🔙</span>
+                        <span class="file-name">.. (返回上级)</span>
+                    </a>
+                </div>
+            {% endif %}
+
+            {% if items %}
+                {% for item in items %}
+                    <div class="file-item {{ 'is-dir' if item.is_dir else '' }}">
+                        <a href="{{ '/view/' + item.rel_path if item.is_dir else '/download/' + item.rel_path }}" 
+                           class="file-info" {{ '' if item.is_dir else 'download' }}>
+                            <span class="file-icon">{{ '📁' if item.is_dir else '📄' }}</span>
+                            <span class="file-name">{{ item.name }}</span>
+                        </a>
                         <div class="actions">
-                            <a href="/download/{{ file }}" download class="btn-action btn-download">下载 💾</a>
-                            <button onclick="deleteFile('{{ file }}')" class="btn-action btn-delete">删除 🗑️</button>
+                            {% if not item.is_dir %}
+                                <a href="/download/{{ item.rel_path }}" download class="action-icon" title="下载">💾</a>
+                            {% endif %}
+                            <span class="action-icon" onclick="deleteItem('{{ item.rel_path }}', '{{ item.name }}')" title="删除" style="color: #d93025;">🗑️</span>
                         </div>
                     </div>
                 {% endfor %}
             {% else %}
-                <p style="text-align: center; color: #8a8d91; padding: 20px;">文件夹空空如也</p>
+                <p style="text-align: center; color: #8a8d91; padding: 30px;">此文件夹为空</p>
             {% endif %}
         </div>
     </div>
 
     <script>
-        const dropZone = document.getElementById('drop-zone');
-        const fileInput = document.getElementById('file-input');
-        const uploadBtn = document.getElementById('start-upload');
         const status = document.getElementById('status');
-        const fileNameDisplay = document.getElementById('file-name-display');
         const progressBar = document.getElementById('progress-bar');
         const progressContainer = document.getElementById('progress-container');
+        const currentPath = "{{ current_path }}";
 
-        // 阻止默认拖拽行为
-        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
-            dropZone.addEventListener(eventName, e => {
-                e.preventDefault();
-                e.stopPropagation();
-            }, false);
-        });
-
-        // 高亮显示拖拽区域
-        ['dragenter', 'dragover'].forEach(eventName => {
-            dropZone.addEventListener(eventName, () => dropZone.classList.add('dragover'), false);
-        });
-
-        ['dragleave', 'drop'].forEach(eventName => {
-            dropZone.addEventListener(eventName, () => dropZone.classList.remove('dragover'), false);
-        });
-
-        // 处理文件选择显示
-        fileInput.addEventListener('change', function() {
-            updateFileDisplay(this.files);
-        });
-
-        // 处理拖拽放置
-        dropZone.addEventListener('drop', function(e) {
-            const files = e.dataTransfer.files;
-            fileInput.files = files;
-            updateFileDisplay(files);
-        }, false);
-
-        function updateFileDisplay(files) {
-            if (files.length > 0) {
-                fileNameDisplay.textContent = `已准备好 ${files.length} 个文件`;
-                status.textContent = '';
-            }
-        }
-
-        // 处理点击上传按钮
-        uploadBtn.addEventListener('click', function(e) {
-            e.stopPropagation(); // 防止触发父容器的点击事件
-            const files = fileInput.files;
-            if (files.length === 0) {
-                status.textContent = '❌ 请先选择或拖拽文件';
-                status.style.color = '#d93025';
-                return;
-            }
-            uploadFiles(files);
-        });
-
-        async function uploadFiles(files) {
-            uploadBtn.disabled = true;
-            status.textContent = '🚀 正在上传...';
+        async function handleFiles(files) {
+            if (files.length === 0) return;
+            
+            status.textContent = '🚀 准备上传...';
             status.style.color = '#1877f2';
             progressContainer.style.display = 'block';
             
             let successCount = 0;
-            
             for (let i = 0; i < files.length; i++) {
                 const formData = new FormData();
                 formData.append('file', files[i]);
+                formData.append('path', currentPath);
+                
+                // 如果是文件夹上传，保留相对路径
+                if (files[i].webkitRelativePath) {
+                    formData.append('webkitRelativePath', files[i].webkitRelativePath);
+                }
                 
                 try {
                     await new Promise((resolve, reject) => {
                         const xhr = new XMLHttpRequest();
                         xhr.open('POST', '/upload', true);
-                        
                         xhr.upload.onprogress = (e) => {
                             if (e.lengthComputable) {
-                                const percentComplete = Math.round((e.loaded / e.total) * 100);
-                                progressBar.style.width = percentComplete + '%';
+                                const percent = Math.round((e.loaded / e.total) * 100);
+                                progressBar.style.width = percent + '%';
                                 status.textContent = `正在上传 (${i+1}/${files.length}): ${files[i].name}`;
                             }
                         };
-                        
-                        xhr.onload = () => {
-                            if (xhr.status === 200) resolve();
-                            else reject();
-                        };
+                        xhr.onload = () => xhr.status === 200 ? resolve() : reject();
                         xhr.onerror = () => reject();
                         xhr.send(formData);
                     });
                     successCount++;
-                } catch (error) {
-                    console.error('上传失败:', files[i].name);
-                }
+                } catch (e) { console.error(e); }
             }
             
-            if (successCount === files.length) {
-                status.textContent = '✅ 全部上传成功！正在刷新...';
-                status.style.color = '#28a745';
-                setTimeout(() => window.location.reload(), 1000);
-            } else {
-                status.textContent = `⚠️ 上传完成，成功 ${successCount}/${files.length}`;
-                status.style.color = '#f4b400';
-                setTimeout(() => window.location.reload(), 2000);
-            }
+            status.textContent = successCount === files.length ? '✅ 上传成功！' : `⚠️ 完成，成功 ${successCount}/${files.length}`;
+            setTimeout(() => window.location.reload(), 1000);
         }
 
-        // 删除文件函数
-        async function deleteFile(filename) {
-            if (!confirm(`确定要删除文件 "${filename}" 吗？`)) {
-                return;
-            }
-
+        async function deleteItem(relPath, name) {
+            if (!confirm(`确定要删除 "${name}" 吗？${relPath.includes('/') ? '\n警告：如果是文件夹，其内部所有内容都将被删除！' : ''}`)) return;
+            
             try {
-                const response = await fetch(`/delete/${encodeURIComponent(filename)}`, {
-                    method: 'DELETE'
-                });
+                const response = await fetch(`/delete/${encodeURIComponent(relPath)}`, { method: 'DELETE' });
+                if (response.ok) window.location.reload();
+                else alert('删除失败');
+            } catch (e) { alert('网络错误'); }
+        }
 
-                if (response.ok) {
-                    status.textContent = '🗑️ 文件已删除';
-                    status.style.color = '#d93025';
-                    setTimeout(() => window.location.reload(), 800);
-                } else {
-                    alert('删除失败，请稍后重试');
-                }
-            } catch (error) {
-                console.error('删除请求出错:', error);
-                alert('网络错误，无法删除文件');
-            }
+        async function createNewFolder() {
+            const dirname = prompt("请输入新文件夹名称:");
+            if (!dirname) return;
+            
+            try {
+                const response = await fetch('/mkdir', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ path: currentPath, dirname: dirname })
+                });
+                if (response.ok) window.location.reload();
+                else alert('创建失败');
+            } catch (e) { alert('网络错误'); }
         }
     </script>
 </body>
