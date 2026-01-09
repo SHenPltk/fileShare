@@ -100,7 +100,8 @@
         <div class="file-list">
             {% if current_path %}
                 <div class="file-item">
-                    <a href="/view/{{ current_path.rsplit('/', 1)[0] if '/' in current_path else '' }}" class="file-info">
+                    {% set parent_path = current_path.rsplit('/', 1)[0] if '/' in current_path else '' %}
+                    <a href="{{ '/view/' + parent_path if parent_path else '/' }}" class="file-info">
                         <span class="file-icon">🔙</span>
                         <span class="file-name">.. (返回上级)</span>
                     </a>

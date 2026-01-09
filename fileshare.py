@@ -25,6 +25,7 @@ def get_local_ip():
     return ip
 
 @app.route("/", methods=["GET"])
+@app.route("/view/", methods=["GET"])
 @app.route("/view/<path:subpath>", methods=["GET"])
 def index(subpath=""):
     """首页及目录浏览"""
