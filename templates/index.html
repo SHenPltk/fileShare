@@ -2,13 +2,15 @@
 <html>
 <head>
     <title>局域网文件共享</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 20px; background-color: #f0f2f5; color: #1c1e21; }
-        .container { max-width: 800px; margin: 0 auto; background: white; padding: 40px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+        .container { max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
         h1 { color: #1877f2; text-align: center; margin-bottom: 10px; }
         .ip-info { text-align: center; color: #65676b; margin-bottom: 30px; font-size: 0.95em; }
         
-        .section-title { border-bottom: 2px solid #e4e6eb; padding-bottom: 10px; margin-top: 30px; margin-bottom: 20px; font-size: 1.2em; color: #4b4f56; }
+        .section-title { border-bottom: 2px solid #e4e6eb; padding-bottom: 10px; margin-top: 30px; margin-bottom: 20px; font-size: 1.2em; color: #4b4f56; font-weight: 600; }
         
         .upload-box { 
             border: 2px dashed #1877f2; 
@@ -19,13 +21,14 @@
             transition: all 0.3s ease;
             background-color: #f7f9fc;
             position: relative;
+            cursor: pointer;
         }
+        .upload-box:hover { background-color: #f0f4f9; }
         .upload-box.dragover { 
             background-color: #e7f3ff; 
             border-color: #166fe5; 
             transform: scale(1.01);
         }
-        .upload-box p { margin: 10px 0; color: #65676b; }
         
         #file-input {
             position: absolute;
@@ -35,7 +38,7 @@
             left: 0;
             opacity: 0;
             cursor: pointer;
-            z-index: 10;
+            z-index: 5;
         }
         
         .btn-submit {
@@ -49,30 +52,49 @@
             font-weight: 600;
             transition: background-color 0.2s;
             position: relative;
-            z-index: 20;
+            z-index: 10;
+            margin-top: 15px;
         }
         .btn-submit:hover { background-color: #166fe5; }
         .btn-submit:disabled { background-color: #bec3c9; cursor: not-allowed; }
         
-        .file-list { margin-top: 20px; }
+        .file-list { margin-top: 10px; }
         .file-item { 
-            margin: 8px 0; 
-            padding: 12px 15px; 
+            margin: 10px 0; 
+            padding: 15px; 
             background: #ffffff; 
             border: 1px solid #e4e6eb;
             border-radius: 8px; 
             display: flex; 
             justify-content: space-between; 
             align-items: center;
-            transition: background-color 0.2s;
+            transition: all 0.2s;
         }
-        .file-item:hover { background-color: #f2f3f5; }
-        .file-item a { color: #050505; text-decoration: none; font-weight: 500; flex-grow: 1; }
+        .file-item:hover { background-color: #f8f9fa; border-color: #1877f2; }
         
-        .actions { display: flex; gap: 15px; align-items: center; }
-        .btn-download { color: #1877f2; text-decoration: none; font-size: 1.2em; cursor: pointer; }
-        .btn-delete { color: #d93025; background: none; border: none; font-size: 1.2em; cursor: pointer; padding: 5px; border-radius: 4px; transition: background-color 0.2s; }
-        .btn-delete:hover { background-color: #ffebee; }
+        .file-info { display: flex; align-items: center; flex-grow: 1; overflow: hidden; }
+        .file-icon { font-size: 1.5em; margin-right: 12px; }
+        .file-name { color: #050505; text-decoration: none; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .file-name:hover { color: #1877f2; text-decoration: underline; }
+        
+        .actions { display: flex; gap: 10px; align-items: center; margin-left: 15px; }
+        .btn-action { 
+            padding: 8px 12px; 
+            border-radius: 6px; 
+            text-decoration: none; 
+            font-size: 0.9em; 
+            font-weight: 600; 
+            cursor: pointer; 
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: none;
+        }
+        .btn-download { background-color: #e7f3ff; color: #1877f2; }
+        .btn-download:hover { background-color: #dbeafe; }
+        .btn-delete { background-color: #fde8e8; color: #d93025; }
+        .btn-delete:hover { background-color: #fbd5d5; }
         
         .status { font-weight: 600; margin-top: 20px; text-align: center; min-height: 1.5em; }
         .progress-container { width: 100%; background-color: #e4e6eb; border-radius: 10px; margin-top: 15px; display: none; overflow: hidden; }
@@ -88,7 +110,7 @@
         <div class="upload-box" id="drop-zone">
             <input type="file" id="file-input" multiple />
             <div id="upload-prompt">
-                <div style="font-size: 50px; margin-bottom: 10px;">📤</div>
+                <div style="font-size: 50px; margin-bottom: 10px;">☁️</div>
                 <p><strong>点击选择文件</strong> 或 <strong>将文件拖拽到此处</strong></p>
                 <p id="file-name-display" style="color: #1877f2; font-weight: bold;"></p>
             </div>
@@ -105,10 +127,13 @@
             {% if files %}
                 {% for file in files %}
                     <div class="file-item">
-                        <a href="/download/{{ file }}" download>{{ file }}</a>
+                        <div class="file-info">
+                            <span class="file-icon">📄</span>
+                            <a href="/download/{{ file }}" class="file-name" title="{{ file }}">{{ file }}</a>
+                        </div>
                         <div class="actions">
-                            <a href="/download/{{ file }}" download class="btn-download" title="下载">💾</a>
-                            <button onclick="deleteFile('{{ file }}')" class="btn-delete" title="删除">🗑️</button>
+                            <a href="/download/{{ file }}" download class="btn-action btn-download">下载 💾</a>
+                            <button onclick="deleteFile('{{ file }}')" class="btn-action btn-delete">删除 🗑️</button>
                         </div>
                     </div>
                 {% endfor %}
@@ -164,7 +189,8 @@
         }
 
         // 处理点击上传按钮
-        uploadBtn.addEventListener('click', function() {
+        uploadBtn.addEventListener('click', function(e) {
+            e.stopPropagation(); // 防止触发父容器的点击事件
             const files = fileInput.files;
             if (files.length === 0) {
                 status.textContent = '❌ 请先选择或拖拽文件';
