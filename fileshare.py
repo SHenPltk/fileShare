@@ -1,8 +1,10 @@
 import os
 import socket
-from flask import Flask, request, render_template, send_from_directory, jsonify, abort
+import shutil
+import zipfile
+import io
+from flask import Flask, request, render_template, send_from_directory, jsonify, abort, send_file
 from flask_cors import CORS
-from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
 CORS(app)
@@ -24,17 +26,19 @@ def get_local_ip():
         s.close()
     return ip
 
+def safe_join(base, *paths):
+    """安全地拼接路径，防止目录穿越"""
+    joined = os.path.abspath(os.path.join(base, *paths))
+    if os.path.commonpath([base, joined]) != base:
+        abort(403)
+    return joined
+
 @app.route("/", methods=["GET"])
 @app.route("/view/", methods=["GET"])
 @app.route("/view/<path:subpath>", methods=["GET"])
 def index(subpath=""):
     """首页及目录浏览"""
-    full_path = os.path.join(SHARED_FOLDER, subpath)
-    
-    # 安全检查：防止目录穿越
-    if not os.path.commonpath([SHARED_FOLDER, os.path.abspath(full_path)]) == SHARED_FOLDER:
-        abort(403)
-        
+    full_path = safe_join(SHARED_FOLDER, subpath)
     if not os.path.exists(full_path):
         return "Directory not found", 404
 
@@ -48,10 +52,8 @@ def index(subpath=""):
             "rel_path": os.path.join(subpath, name).replace("\\", "/")
         })
     
-    # 排序：文件夹在前，文件在后
     items.sort(key=lambda x: (not x["is_dir"], x["name"].lower()))
     
-    # 计算面包屑导航
     path_parts = subpath.split("/") if subpath else []
     breadcrumbs = []
     curr_path = ""
@@ -68,85 +70,101 @@ def index(subpath=""):
 
 @app.route("/upload", methods=["POST"])
 def upload_file():
-    """文件上传接口，支持上传到指定子目录"""
+    """文件上传接口"""
     if "file" not in request.files:
         return "No file uploaded", 400
     
     file = request.files["file"]
     subpath = request.form.get("path", "")
-    
-    if file.filename == "":
-        return "No file selected", 400
-    
-    # 处理文件夹上传时的相对路径
-    # 很多浏览器在上传文件夹时会提供 webkitRelativePath
     rel_path = request.form.get("webkitRelativePath", "")
+    
     if rel_path:
-        target_dir = os.path.join(SHARED_FOLDER, subpath, os.path.dirname(rel_path))
-        filename = os.path.basename(rel_path)
+        target_path = safe_join(SHARED_FOLDER, subpath, rel_path)
     else:
-        target_dir = os.path.join(SHARED_FOLDER, subpath)
-        filename = file.filename
+        target_path = safe_join(SHARED_FOLDER, subpath, file.filename)
 
-    if not os.path.exists(target_dir):
-        os.makedirs(target_dir, exist_ok=True)
-        
-    file.save(os.path.join(target_dir, filename))
-    return "File uploaded successfully", 200
+    os.makedirs(os.path.dirname(target_path), exist_ok=True)
+    file.save(target_path)
+    return "OK", 200
 
 @app.route("/download/<path:filename>", methods=["GET"])
-def download_file(filename):
-    """文件下载接口"""
+def download_item(filename):
+    """下载文件或文件夹（文件夹自动打包为ZIP）"""
+    full_path = safe_join(SHARED_FOLDER, filename)
+    
+    if os.path.isdir(full_path):
+        # 打包文件夹
+        memory_file = io.BytesIO()
+        with zipfile.ZipFile(memory_file, 'w', zipfile.ZIP_DEFLATED) as zf:
+            for root, dirs, files in os.walk(full_path):
+                for file in files:
+                    file_path = os.path.join(root, file)
+                    arcname = os.path.relpath(file_path, os.path.dirname(full_path))
+                    zf.write(file_path, arcname)
+        memory_file.seek(0)
+        return send_file(memory_file, 
+                         mimetype='application/zip', 
+                         as_attachment=True, 
+                         download_name=f"{os.path.basename(full_path)}.zip")
+    
     return send_from_directory(SHARED_FOLDER, filename, as_attachment=True)
 
-@app.route("/delete/<path:filename>", methods=["DELETE"])
-def delete_item(filename):
-    """文件或文件夹删除接口"""
-    full_path = os.path.join(SHARED_FOLDER, filename)
-    
-    # 安全检查
-    if not os.path.commonpath([SHARED_FOLDER, os.path.abspath(full_path)]) == SHARED_FOLDER:
-        abort(403)
-
-    if os.path.exists(full_path):
-        try:
+@app.route("/delete", methods=["POST"])
+def delete_items():
+    """批量删除文件或文件夹"""
+    data = request.get_json()
+    paths = data.get("paths", [])
+    for path in paths:
+        full_path = safe_join(SHARED_FOLDER, path)
+        if os.path.exists(full_path):
             if os.path.isdir(full_path):
-                import shutil
                 shutil.rmtree(full_path)
             else:
                 os.remove(full_path)
-            return "Item deleted successfully", 200
-        except Exception as e:
-            return f"Error deleting item: {str(e)}", 500
-    else:
-        return "Item not found", 404
+    return "OK", 200
+
+@app.route("/fs_op", methods=["POST"])
+def file_system_operation():
+    """文件系统操作：移动、复制、重命名"""
+    data = request.get_json()
+    op = data.get("op") # 'move', 'copy', 'rename'
+    src_paths = data.get("src_paths", [])
+    dest_dir = data.get("dest_dir", "")
+    new_name = data.get("new_name") # 仅用于重命名
+
+    try:
+        if op == 'rename':
+            if len(src_paths) != 1 or not new_name:
+                return "Invalid rename request", 400
+            src = safe_join(SHARED_FOLDER, src_paths[0])
+            dest = safe_join(os.path.dirname(src), new_name)
+            os.rename(src, dest)
+        
+        elif op in ['move', 'copy']:
+            dest_base = safe_join(SHARED_FOLDER, dest_dir)
+            for path in src_paths:
+                src = safe_join(SHARED_FOLDER, path)
+                dest = os.path.join(dest_base, os.path.basename(src))
+                if op == 'move':
+                    shutil.move(src, dest)
+                else:
+                    if os.path.isdir(src):
+                        shutil.copytree(src, dest)
+                    else:
+                        shutil.copy2(src, dest)
+        return "OK", 200
+    except Exception as e:
+        return str(e), 500
 
 @app.route("/mkdir", methods=["POST"])
 def make_directory():
-    """创建新文件夹"""
     data = request.get_json()
-    subpath = data.get("path", "")
-    dirname = data.get("dirname", "")
-    
-    if not dirname:
-        return "Directory name required", 400
-        
-    target_dir = os.path.join(SHARED_FOLDER, subpath, dirname)
-    
-    # 安全检查
-    if not os.path.commonpath([SHARED_FOLDER, os.path.abspath(target_dir)]) == SHARED_FOLDER:
-        abort(403)
-        
-    try:
-        os.makedirs(target_dir, exist_ok=True)
-        return "Directory created", 200
-    except Exception as e:
-        return str(e), 500
+    target_dir = safe_join(SHARED_FOLDER, data.get("path", ""), data.get("dirname", ""))
+    os.makedirs(target_dir, exist_ok=True)
+    return "OK", 200
 
 if __name__ == "__main__":
     local_ip = get_local_ip()
     print(f"\n=== 文件共享服务已启动 ===")
-    print(f"在浏览器访问（其他设备）: http://{local_ip}:5000")
-    print(f"存储目录: {os.path.abspath(SHARED_FOLDER)}")
-    print("按 Ctrl+C 停止服务\n")
+    print(f"在浏览器访问: http://{local_ip}:5000")
     app.run(host="0.0.0.0", port=5000)

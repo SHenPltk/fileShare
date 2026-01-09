@@ -5,62 +5,59 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 20px; background-color: #f0f2f5; color: #1c1e21; }
-        .container { max-width: 900px; margin: 0 auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
-        h1 { color: #1877f2; text-align: center; margin-bottom: 10px; }
+        :root { --primary: #1877f2; --bg: #f0f2f5; --text: #1c1e21; --danger: #d93025; }
+        body { font-family: 'Segoe UI', system-ui, sans-serif; margin: 0; padding: 20px; background: var(--bg); color: var(--text); }
+        .container { max-width: 1000px; margin: 0 auto; background: white; padding: 25px; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        
+        /* 头部与导航 */
+        h1 { color: var(--primary); text-align: center; margin: 0 0 10px; }
         .ip-info { text-align: center; color: #65676b; margin-bottom: 20px; font-size: 0.9em; }
-        
-        .breadcrumb { margin-bottom: 20px; padding: 12px 15px; background: #f8f9fa; border-radius: 8px; font-size: 0.95em; display: flex; align-items: center; }
-        .breadcrumb a { color: #1877f2; text-decoration: none; font-weight: 500; }
-        .breadcrumb a:hover { text-decoration: underline; }
-        .breadcrumb .separator { margin: 0 8px; color: #bec3c9; }
-        
-        .upload-area { 
-            border: 2px dashed #1877f2; 
-            padding: 40px; 
-            text-align: center; 
-            margin-bottom: 20px; 
-            border-radius: 12px;
-            background-color: #f7f9fc;
-            position: relative;
-            transition: all 0.3s ease;
-        }
-        .upload-area.dragover { background-color: #e7f3ff; border-color: #166fe5; transform: scale(1.01); }
-        
-        #file-input { position: absolute; width: 100%; height: 100%; top: 0; left: 0; opacity: 0; cursor: pointer; z-index: 5; }
-        
-        .toolbar { display: flex; gap: 10px; margin-bottom: 20px; justify-content: center; }
-        .btn { padding: 10px 20px; border-radius: 6px; border: none; font-weight: 600; cursor: pointer; transition: all 0.2s; font-size: 14px; display: inline-flex; align-items: center; gap: 8px; z-index: 10; position: relative; }
-        .btn-primary { background-color: #1877f2; color: white; }
-        .btn-primary:hover { background-color: #166fe5; }
-        .btn-outline { background-color: white; color: #1877f2; border: 1px solid #1877f2; }
-        .btn-outline:hover { background-color: #f0f7ff; }
+        .breadcrumb { margin-bottom: 15px; padding: 10px; background: #f8f9fa; border-radius: 8px; display: flex; align-items: center; font-size: 0.9em; }
+        .breadcrumb a { color: var(--primary); text-decoration: none; font-weight: 500; }
+        .breadcrumb .sep { margin: 0 8px; color: #bec3c9; }
 
-        .file-list { border: 1px solid #e4e6eb; border-radius: 8px; overflow: hidden; }
-        .file-item { 
-            padding: 12px 15px; 
-            display: flex; 
-            justify-content: space-between; 
-            align-items: center;
-            border-bottom: 1px solid #e4e6eb;
-        }
+        /* 上传区域 */
+        .upload-area { border: 2px dashed var(--primary); padding: 30px; text-align: center; margin-bottom: 20px; border-radius: 12px; background: #f7f9fc; position: relative; cursor: pointer; }
+        .upload-area.dragover { background: #e7f3ff; border-color: #166fe5; }
+        #file-input { position: absolute; inset: 0; opacity: 0; cursor: pointer; z-index: 5; }
+
+        /* 批量操作栏 */
+        .batch-bar { display: none; background: #e7f3ff; padding: 12px 20px; border-radius: 8px; margin-bottom: 15px; align-items: center; gap: 15px; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        .batch-info { font-weight: 600; color: var(--primary); flex-grow: 1; }
+
+        /* 工具栏 */
+        .toolbar { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
+        .btn { padding: 8px 16px; border-radius: 6px; border: none; font-weight: 600; cursor: pointer; transition: 0.2s; font-size: 14px; display: inline-flex; align-items: center; gap: 6px; }
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-outline { background: white; color: var(--primary); border: 1px solid var(--primary); }
+        .btn-danger { background: #fde8e8; color: var(--danger); }
+        .btn:hover { opacity: 0.85; }
+
+        /* 文件列表 */
+        .file-list { border: 1px solid #e4e6eb; border-radius: 8px; }
+        .file-header { display: flex; padding: 12px 15px; background: #f8f9fa; border-bottom: 1px solid #e4e6eb; font-weight: 600; font-size: 0.9em; color: #65676b; }
+        .file-item { display: flex; padding: 10px 15px; align-items: center; border-bottom: 1px solid #e4e6eb; transition: 0.2s; }
         .file-item:last-child { border-bottom: none; }
-        .file-item:hover { background-color: #f8f9fa; }
+        .file-item:hover { background: #f8f9fa; }
         
-        .file-info { display: flex; align-items: center; flex-grow: 1; gap: 12px; text-decoration: none; color: inherit; overflow: hidden; }
-        .file-icon { font-size: 1.4em; flex-shrink: 0; }
-        .file-name { font-weight: 500; color: #050505; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .is-dir .file-name { color: #1877f2; }
+        .col-check { width: 30px; flex-shrink: 0; }
+        .col-info { flex-grow: 1; display: flex; align-items: center; gap: 12px; overflow: hidden; text-decoration: none; color: inherit; }
+        .col-actions { width: 150px; display: flex; justify-content: flex-end; gap: 10px; }
         
-        .actions { display: flex; gap: 12px; margin-left: 15px; }
-        .action-btn { cursor: pointer; font-size: 1.1em; text-decoration: none; padding: 5px; border-radius: 4px; transition: background 0.2s; border: none; background: none; }
-        .action-btn:hover { background-color: #f0f2f5; }
-        .delete-btn { color: #d93025; }
-        .delete-btn:hover { background-color: #fde8e8; }
+        .file-icon { font-size: 1.4em; }
+        .file-name { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .is-dir .file-name { color: var(--primary); }
 
-        .status-container { margin-top: 15px; text-align: center; }
-        .progress-container { width: 100%; background-color: #e4e6eb; border-radius: 10px; margin-top: 10px; display: none; overflow: hidden; }
-        .progress-bar { width: 0%; height: 8px; background-color: #28a745; transition: width 0.1s; }
+        .action-btn { cursor: pointer; font-size: 1.1em; padding: 5px; border-radius: 4px; border: none; background: none; color: #65676b; }
+        .action-btn:hover { background: #f0f2f5; color: var(--primary); }
+        .action-btn.del:hover { color: var(--danger); background: #fde8e8; }
+
+        /* 进度条 */
+        .progress-container { width: 100%; background: #e4e6eb; border-radius: 10px; margin-top: 10px; display: none; overflow: hidden; }
+        .progress-bar { width: 0%; height: 6px; background: #28a745; transition: width 0.1s; }
+        
+        /* 剪贴板提示 */
+        .clipboard-bar { display: none; background: #fff3cd; padding: 10px 20px; border-radius: 8px; margin-bottom: 15px; align-items: center; gap: 15px; border: 1px solid #ffeeba; }
     </style>
 </head>
 <body>
@@ -71,177 +68,246 @@
         <div class="breadcrumb">
             <a href="/">🏠 根目录</a>
             {% for crumb in breadcrumbs %}
-                <span class="separator">/</span>
+                <span class="sep">/</span>
                 <a href="/view/{{ crumb.path }}">{{ crumb.name }}</a>
             {% endfor %}
         </div>
 
+        <!-- 批量操作栏 -->
+        <div class="batch-bar" id="batch-bar">
+            <span class="batch-info" id="batch-info">已选择 0 个项目</span>
+            <button class="btn btn-primary" onclick="batchDownload()">📥 批量下载</button>
+            <button class="btn btn-outline" onclick="copyToClipboard('copy')">📋 复制</button>
+            <button class="btn btn-outline" onclick="copyToClipboard('move')">✂️ 剪切</button>
+            <button class="btn btn-danger" onclick="batchDelete()">🗑️ 删除</button>
+            <button class="btn" onclick="clearSelection()">取消</button>
+        </div>
+
+        <!-- 剪贴板操作栏 -->
+        <div class="clipboard-bar" id="clipboard-bar">
+            <span style="flex-grow: 1;" id="clipboard-info"></span>
+            <button class="btn btn-primary" onclick="pasteItems()">📋 粘贴到此处</button>
+            <button class="btn" onclick="clearClipboard()">取消</button>
+        </div>
+
         <div class="upload-area" id="drop-zone">
             <input type="file" id="file-input" multiple>
-            <div id="upload-prompt">
-                <div style="font-size: 48px; margin-bottom: 10px;">☁️</div>
-                <p><strong>拖拽文件或文件夹到此处</strong></p>
-                <p style="color: #65676b; font-size: 0.9em;">或者点击此处选择文件</p>
-                <p id="selected-info" style="color: #1877f2; font-weight: bold; margin-top: 10px;"></p>
-            </div>
+            <div style="font-size: 40px;">☁️</div>
+            <p><strong>拖拽文件或文件夹到此处</strong></p>
+            <p id="selected-count" style="color: var(--primary); font-weight: bold;"></p>
         </div>
 
         <div class="toolbar">
-            <button class="btn btn-primary" id="start-upload-btn">🚀 开始上传</button>
+            <button class="btn btn-primary" id="upload-btn">🚀 开始上传</button>
             <button class="btn btn-outline" onclick="createNewFolder()">➕ 新建文件夹</button>
         </div>
 
-        <div class="status-container">
-            <div class="progress-container" id="progress-container">
-                <div class="progress-bar" id="progress-bar"></div>
-            </div>
-            <div id="status" style="font-weight: 600; font-size: 0.9em;"></div>
+        <div class="progress-container" id="progress-container">
+            <div class="progress-bar" id="progress-bar"></div>
         </div>
+        <div id="status" style="text-align: center; font-size: 0.9em; margin: 10px 0;"></div>
 
         <div class="file-list">
+            <div class="file-header">
+                <div class="col-check"><input type="checkbox" id="select-all" onclick="toggleSelectAll()"></div>
+                <div class="col-info">名称</div>
+                <div class="col-actions">操作</div>
+            </div>
+
             {% if current_path %}
                 <div class="file-item">
+                    <div class="col-check"></div>
                     {% set parent_path = current_path.rsplit('/', 1)[0] if '/' in current_path else '' %}
-                    <a href="{{ '/view/' + parent_path if parent_path else '/' }}" class="file-info">
+                    <a href="{{ '/view/' + parent_path if parent_path else '/' }}" class="col-info">
                         <span class="file-icon">🔙</span>
                         <span class="file-name">.. (返回上级)</span>
                     </a>
+                    <div class="col-actions"></div>
                 </div>
             {% endif %}
 
-            {% if items %}
-                {% for item in items %}
-                    <div class="file-item {{ 'is-dir' if item.is_dir else '' }}">
-                        <a href="{{ '/view/' + item.rel_path if item.is_dir else '/download/' + item.rel_path }}" 
-                           class="file-info" {{ '' if item.is_dir else 'download' }}>
-                            <span class="file-icon">{{ '📁' if item.is_dir else '📄' }}</span>
-                            <span class="file-name">{{ item.name }}</span>
-                        </a>
-                        <div class="actions">
-                            {% if not item.is_dir %}
-                                <a href="/download/{{ item.rel_path }}" download class="action-btn" title="下载">💾</a>
-                            {% endif %}
-                            <button onclick="deleteItem('{{ item.rel_path }}', '{{ item.name }}')" class="action-btn delete-btn" title="删除">🗑️</button>
-                        </div>
+            {% for item in items %}
+                <div class="file-item {{ 'is-dir' if item.is_dir else '' }}">
+                    <div class="col-check"><input type="checkbox" class="item-check" value="{{ item.rel_path }}" onclick="updateBatchBar()"></div>
+                    <a href="{{ '/view/' + item.rel_path if item.is_dir else '/download/' + item.rel_path }}" 
+                       class="col-info" {{ '' if item.is_dir else 'download' }}>
+                        <span class="file-icon">{{ '📁' if item.is_dir else '📄' }}</span>
+                        <span class="file-name">{{ item.name }}</span>
+                    </a>
+                    <div class="col-actions">
+                        <a href="/download/{{ item.rel_path }}" download class="action-btn" title="下载">📥</a>
+                        <button onclick="renameItem('{{ item.rel_path }}', '{{ item.name }}')" class="action-btn" title="重命名">✏️</button>
+                        <button onclick="deleteItem('{{ item.rel_path }}', '{{ item.name }}')" class="action-btn del" title="删除">🗑️</button>
                     </div>
-                {% endfor %}
-            {% else %}
-                <p style="text-align: center; color: #8a8d91; padding: 30px;">此文件夹为空</p>
-            {% endif %}
+                </div>
+            {% endfor %}
         </div>
     </div>
 
     <script>
-        const dropZone = document.getElementById('drop-zone');
+        const currentPath = "{{ current_path }}";
+        let clipboard = { op: null, paths: [] };
+
+        // 基础交互
+        function updateBatchBar() {
+            const checked = document.querySelectorAll('.item-check:checked');
+            const bar = document.getElementById('batch-bar');
+            document.getElementById('batch-info').textContent = `已选择 ${checked.length} 个项目`;
+            bar.style.display = checked.length > 0 ? 'flex' : 'none';
+        }
+
+        function toggleSelectAll() {
+            const isChecked = document.getElementById('select-all').checked;
+            document.querySelectorAll('.item-check').forEach(c => c.checked = isChecked);
+            updateBatchBar();
+        }
+
+        function clearSelection() {
+            document.querySelectorAll('.item-check').forEach(c => c.checked = false);
+            document.getElementById('select-all').checked = false;
+            updateBatchBar();
+        }
+
+        // 剪贴板操作
+        function copyToClipboard(op) {
+            const paths = Array.from(document.querySelectorAll('.item-check:checked')).map(c => c.value);
+            clipboard = { op, paths };
+            document.getElementById('clipboard-info').textContent = `已${op === 'copy' ? '复制' : '剪切'} ${paths.length} 个项目`;
+            document.getElementById('clipboard-bar').style.display = 'flex';
+            clearSelection();
+        }
+
+        function clearClipboard() {
+            clipboard = { op: null, paths: [] };
+            document.getElementById('clipboard-bar').style.display = 'none';
+        }
+
+        async function pasteItems() {
+            const res = await fetch('/fs_op', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ op: clipboard.op, src_paths: clipboard.paths, dest_dir: currentPath })
+            });
+            if (res.ok) {
+                clearClipboard();
+                window.location.reload();
+            } else alert('操作失败');
+        }
+
+        // 文件操作
+        async function renameItem(relPath, oldName) {
+            const newName = prompt("请输入新名称:", oldName);
+            if (!newName || newName === oldName) return;
+            const res = await fetch('/fs_op', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ op: 'rename', src_paths: [relPath], new_name: newName })
+            });
+            if (res.ok) window.location.reload();
+            else alert('重命名失败');
+        }
+
+        async function deleteItem(path, name) {
+            if (confirm(`确定删除 "${name}" 吗？`)) {
+                const res = await fetch('/delete', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ paths: [path] })
+                });
+                if (res.ok) window.location.reload();
+            }
+        }
+
+        async function batchDelete() {
+            const paths = Array.from(document.querySelectorAll('.item-check:checked')).map(c => c.value);
+            if (confirm(`确定删除选中的 ${paths.length} 个项目吗？`)) {
+                const res = await fetch('/delete', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ paths })
+                });
+                if (res.ok) window.location.reload();
+            }
+        }
+
+        function batchDownload() {
+            const paths = Array.from(document.querySelectorAll('.item-check:checked')).map(c => c.value);
+            paths.forEach((path, index) => {
+                setTimeout(() => {
+                    const link = document.createElement('a');
+                    link.href = `/download/${encodeURIComponent(path)}`;
+                    link.download = '';
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                }, index * 500); // 间隔下载防止浏览器拦截
+            });
+        }
+
+        // 上传逻辑
         const fileInput = document.getElementById('file-input');
-        const startUploadBtn = document.getElementById('start-upload-btn');
-        const status = document.getElementById('status');
+        const uploadBtn = document.getElementById('upload-btn');
         const progressBar = document.getElementById('progress-bar');
         const progressContainer = document.getElementById('progress-container');
-        const selectedInfo = document.getElementById('selected-info');
-        const currentPath = "{{ current_path }}";
-
-        // 拖拽处理
-        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(name => {
-            dropZone.addEventListener(name, e => { e.preventDefault(); e.stopPropagation(); });
-        });
-
-        ['dragenter', 'dragover'].forEach(name => {
-            dropZone.addEventListener(name, () => dropZone.classList.add('dragover'));
-        });
-
-        ['dragleave', 'drop'].forEach(name => {
-            dropZone.addEventListener(name, () => dropZone.classList.remove('dragover'));
-        });
+        const status = document.getElementById('status');
 
         fileInput.addEventListener('change', () => {
-            if (fileInput.files.length > 0) {
-                selectedInfo.textContent = `已选择 ${fileInput.files.length} 个项目`;
-            }
+            document.getElementById('selected-count').textContent = `已选择 ${fileInput.files.length} 个项目`;
         });
 
-        dropZone.addEventListener('drop', e => {
-            const files = e.dataTransfer.files;
-            fileInput.files = files;
-            selectedInfo.textContent = `已选择 ${files.length} 个项目`;
-        });
-
-        startUploadBtn.addEventListener('click', async () => {
+        uploadBtn.addEventListener('click', async () => {
             const files = fileInput.files;
-            if (files.length === 0) {
-                status.textContent = '❌ 请先选择或拖拽文件';
-                status.style.color = '#d93025';
-                return;
-            }
-
-            startUploadBtn.disabled = true;
+            if (files.length === 0) return alert('请先选择文件');
+            
+            uploadBtn.disabled = true;
             progressContainer.style.display = 'block';
             
-            let successCount = 0;
             for (let i = 0; i < files.length; i++) {
                 const formData = new FormData();
                 formData.append('file', files[i]);
                 formData.append('path', currentPath);
-                
-                // 尝试获取相对路径（用于文件夹拖拽）
-                const relPath = files[i].webkitRelativePath || files[i].name;
-                if (files[i].webkitRelativePath) {
-                    formData.append('webkitRelativePath', files[i].webkitRelativePath);
-                }
+                if (files[i].webkitRelativePath) formData.append('webkitRelativePath', files[i].webkitRelativePath);
 
-                try {
-                    await new Promise((resolve, reject) => {
-                        const xhr = new XMLHttpRequest();
-                        xhr.open('POST', '/upload', true);
-                        xhr.upload.onprogress = (e) => {
-                            if (e.lengthComputable) {
-                                const percent = Math.round((e.loaded / e.total) * 100);
-                                progressBar.style.width = percent + '%';
-                                status.textContent = `正在上传 (${i+1}/${files.length}): ${files[i].name}`;
-                            }
-                        };
-                        xhr.onload = () => xhr.status === 200 ? resolve() : reject();
-                        xhr.onerror = () => reject();
-                        xhr.send(formData);
-                    });
-                    successCount++;
-                } catch (e) { console.error(e); }
+                await new Promise((resolve) => {
+                    const xhr = new XMLHttpRequest();
+                    xhr.open('POST', '/upload', true);
+                    xhr.upload.onprogress = (e) => {
+                        if (e.lengthComputable) {
+                            const p = Math.round((e.loaded / e.total) * 100);
+                            progressBar.style.width = p + '%';
+                            status.textContent = `上传中 (${i+1}/${files.length}): ${files[i].name}`;
+                        }
+                    };
+                    xhr.onload = resolve;
+                    xhr.send(formData);
+                });
             }
-            
-            status.textContent = '✅ 上传完成！正在刷新...';
-            setTimeout(() => window.location.reload(), 1000);
+            window.location.reload();
         });
 
-        async function deleteItem(relPath, name) {
-            if (!confirm(`确定要删除 "${name}" 吗？\n如果是文件夹，其内部所有内容都将被永久删除！`)) return;
-            
-            try {
-                // 对路径进行编码，处理特殊字符和斜杠
-                const encodedPath = relPath.split('/').map(encodeURIComponent).join('/');
-                const response = await fetch(`/delete/${encodedPath}`, { method: 'DELETE' });
-                if (response.ok) {
-                    window.location.reload();
-                } else {
-                    const errorText = await response.text();
-                    alert('删除失败: ' + errorText);
-                }
-            } catch (e) { alert('网络错误'); }
+        async function createNewFolder() {
+            const name = prompt("文件夹名称:");
+            if (!name) return;
+            const res = await fetch('/mkdir', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ path: currentPath, dirname: name })
+            });
+            if (res.ok) window.location.reload();
         }
 
-        async function createNewFolder() {
-            const dirname = prompt("请输入新文件夹名称:");
-            if (!dirname || dirname.trim() === "") return;
-            
-            try {
-                const response = await fetch('/mkdir', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ path: currentPath, dirname: dirname.trim() })
-                });
-                if (response.ok) window.location.reload();
-                else alert('创建失败');
-            } catch (e) { alert('网络错误'); }
-        }
+        // 拖拽支持
+        const dropZone = document.getElementById('drop-zone');
+        ['dragenter', 'dragover'].forEach(n => dropZone.addEventListener(n, e => {
+            e.preventDefault(); dropZone.classList.add('dragover');
+        }));
+        ['dragleave', 'drop'].forEach(n => dropZone.addEventListener(n, e => {
+            e.preventDefault(); dropZone.classList.remove('dragover');
+        }));
+        dropZone.addEventListener('drop', e => {
+            fileInput.files = e.dataTransfer.files;
+            document.getElementById('selected-count').textContent = `已选择 ${fileInput.files.length} 个项目`;
+        });
     </script>
 </body>
 </html>
