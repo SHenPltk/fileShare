@@ -46,6 +46,19 @@ def download_file(filename):
     """文件下载接口"""
     return send_from_directory(SHARED_FOLDER, filename, as_attachment=True)
 
+@app.route("/delete/<filename>", methods=["DELETE"])
+def delete_file(filename):
+    """文件删除接口"""
+    file_path = os.path.join(SHARED_FOLDER, filename)
+    if os.path.exists(file_path):
+        try:
+            os.remove(file_path)
+            return "File deleted successfully", 200
+        except Exception as e:
+            return f"Error deleting file: {str(e)}", 500
+    else:
+        return "File not found", 404
+
 if __name__ == "__main__":
     local_ip = get_local_ip()
     print(f"\n=== 文件共享服务已启动 ===")

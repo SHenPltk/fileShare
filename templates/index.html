@@ -27,7 +27,6 @@
         }
         .upload-box p { margin: 10px 0; color: #65676b; }
         
-        /* 隐藏原始 input 但保持其功能 */
         #file-input {
             position: absolute;
             width: 100%;
@@ -50,7 +49,7 @@
             font-weight: 600;
             transition: background-color 0.2s;
             position: relative;
-            z-index: 20; /* 确保按钮在 input 之上，可以被点击 */
+            z-index: 20;
         }
         .btn-submit:hover { background-color: #166fe5; }
         .btn-submit:disabled { background-color: #bec3c9; cursor: not-allowed; }
@@ -69,7 +68,11 @@
         }
         .file-item:hover { background-color: #f2f3f5; }
         .file-item a { color: #050505; text-decoration: none; font-weight: 500; flex-grow: 1; }
-        .file-item .download-icon { color: #1877f2; font-size: 1.2em; }
+        
+        .actions { display: flex; gap: 15px; align-items: center; }
+        .btn-download { color: #1877f2; text-decoration: none; font-size: 1.2em; cursor: pointer; }
+        .btn-delete { color: #d93025; background: none; border: none; font-size: 1.2em; cursor: pointer; padding: 5px; border-radius: 4px; transition: background-color 0.2s; }
+        .btn-delete:hover { background-color: #ffebee; }
         
         .status { font-weight: 600; margin-top: 20px; text-align: center; min-height: 1.5em; }
         .progress-container { width: 100%; background-color: #e4e6eb; border-radius: 10px; margin-top: 15px; display: none; overflow: hidden; }
@@ -103,7 +106,10 @@
                 {% for file in files %}
                     <div class="file-item">
                         <a href="/download/{{ file }}" download>{{ file }}</a>
-                        <span class="download-icon">💾</span>
+                        <div class="actions">
+                            <a href="/download/{{ file }}" download class="btn-download" title="下载">💾</a>
+                            <button onclick="deleteFile('{{ file }}')" class="btn-delete" title="删除">🗑️</button>
+                        </div>
                     </div>
                 {% endfor %}
             {% else %}
@@ -146,7 +152,7 @@
         // 处理拖拽放置
         dropZone.addEventListener('drop', function(e) {
             const files = e.dataTransfer.files;
-            fileInput.files = files; // 将拖拽的文件赋值给 input
+            fileInput.files = files;
             updateFileDisplay(files);
         }, false);
 
@@ -214,6 +220,30 @@
                 status.textContent = `⚠️ 上传完成，成功 ${successCount}/${files.length}`;
                 status.style.color = '#f4b400';
                 setTimeout(() => window.location.reload(), 2000);
+            }
+        }
+
+        // 删除文件函数
+        async function deleteFile(filename) {
+            if (!confirm(`确定要删除文件 "${filename}" 吗？`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/delete/${encodeURIComponent(filename)}`, {
+                    method: 'DELETE'
+                });
+
+                if (response.ok) {
+                    status.textContent = '🗑️ 文件已删除';
+                    status.style.color = '#d93025';
+                    setTimeout(() => window.location.reload(), 800);
+                } else {
+                    alert('删除失败，请稍后重试');
+                }
+            } catch (error) {
+                console.error('删除请求出错:', error);
+                alert('网络错误，无法删除文件');
             }
         }
     </script>
