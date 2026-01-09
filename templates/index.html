@@ -3,29 +3,75 @@
 <head>
     <title>局域网文件共享</title>
     <style>
-        body { font-family: Arial, sans-serif; margin: 20px; }
-        .container { max-width: 800px; margin: 0 auto; }
-        h1 { color: #333; }
-        .file-list { margin: 20px 0; }
-        .file-item { margin: 5px 0; }
-        a { color: #0066cc; text-decoration: none; }
+        body { font-family: Arial, sans-serif; margin: 20px; background-color: #f4f4f9; }
+        .container { max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        h1 { color: #333; text-align: center; }
+        .file-list { margin: 20px 0; border-top: 1px solid #eee; padding-top: 20px; }
+        .file-item { margin: 10px 0; padding: 10px; background: #f9f9f9; border-radius: 4px; display: flex; justify-content: space-between; align-items: center; }
+        a { color: #0066cc; text-decoration: none; font-weight: bold; }
         a:hover { text-decoration: underline; }
-        .upload-box { border: 2px dashed #aaa; padding: 20px; text-align: center; margin: 20px 0; }
-        .status { font-weight: bold; margin-top: 10px; }
+        
+        .upload-box { 
+            border: 3px dashed #0066cc; 
+            padding: 40px; 
+            text-align: center; 
+            margin: 20px 0; 
+            border-radius: 10px;
+            transition: background-color 0.3s, border-color 0.3s;
+            cursor: pointer;
+            position: relative;
+        }
+        .upload-box.dragover { 
+            background-color: #e1f5fe; 
+            border-color: #01579b; 
+        }
+        .upload-box p { margin: 10px 0; color: #666; }
+        .upload-box input[type="file"] {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            top: 0;
+            left: 0;
+            opacity: 0;
+            cursor: pointer;
+        }
+        
+        .btn-submit {
+            background-color: #0066cc;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-top: 10px;
+        }
+        .btn-submit:hover { background-color: #0052a3; }
+        
+        .status { font-weight: bold; margin-top: 15px; text-align: center; }
+        .progress-container { width: 100%; background-color: #ddd; border-radius: 4px; margin-top: 10px; display: none; }
+        .progress-bar { width: 0%; height: 20px; background-color: #4caf50; border-radius: 4px; text-align: center; line-height: 20px; color: white; }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>📁 局域网文件共享</h1>
-        <p>当前 IP: <strong>{{ ip }}</strong>（其他设备浏览器访问此地址）</p>
+        <p style="text-align: center;">当前 IP: <strong>{{ ip }}</strong></p>
         
         <h2>📤 上传文件</h2>
-        <div class="upload-box">
-            <form action="/upload" method="post" enctype="multipart/form-data">
-                <input type="file" name="file" multiple />
-                <p>拖放文件到此处，或点击选择文件</p>
-                <input type="submit" value="上传" />
+        <div class="upload-box" id="drop-zone">
+            <form id="upload-form" enctype="multipart/form-data">
+                <input type="file" name="file" id="file-input" multiple />
+                <div id="upload-prompt">
+                    <p style="font-size: 48px; margin: 0;">☁️</p>
+                    <p><strong>点击选择文件</strong> 或 <strong>将文件拖拽到此处</strong></p>
+                    <p id="file-name-display"></p>
+                </div>
+                <button type="submit" class="btn-submit">开始上传</button>
             </form>
+            <div class="progress-container" id="progress-container">
+                <div class="progress-bar" id="progress-bar">0%</div>
+            </div>
             <div class="status" id="status"></div>
         </div>
 
@@ -35,12 +81,123 @@
                 {% for file in files %}
                     <div class="file-item">
                         <a href="/download/{{ file }}" download>{{ file }}</a>
+                        <span style="color: #999; font-size: 0.9em;">文件</span>
                     </div>
                 {% endfor %}
             {% else %}
-                <p>暂无文件</p>
+                <p style="text-align: center; color: #999;">暂无文件</p>
             {% endif %}
         </div>
     </div>
+
+    <script>
+        const dropZone = document.getElementById('drop-zone');
+        const fileInput = document.getElementById('file-input');
+        const uploadForm = document.getElementById('upload-form');
+        const status = document.getElementById('status');
+        const fileNameDisplay = document.getElementById('file-name-display');
+        const progressBar = document.getElementById('progress-bar');
+        const progressContainer = document.getElementById('progress-container');
+
+        // 阻止默认拖拽行为
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, preventDefaults, false);
+            document.body.addEventListener(eventName, preventDefaults, false);
+        });
+
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        // 高亮显示拖拽区域
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropZone.addEventListener(eventName, () => dropZone.classList.add('dragover'), false);
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, () => dropZone.classList.remove('dragover'), false);
+        });
+
+        // 处理文件选择显示
+        fileInput.addEventListener('change', function() {
+            if (this.files.length > 0) {
+                fileNameDisplay.textContent = `已选择 ${this.files.length} 个文件`;
+            }
+        });
+
+        // 处理拖拽放置
+        dropZone.addEventListener('drop', handleDrop, false);
+
+        function handleDrop(e) {
+            const dt = e.dataTransfer;
+            const files = dt.files;
+            fileInput.files = files;
+            fileNameDisplay.textContent = `已选择 ${files.length} 个文件`;
+        }
+
+        // 处理表单提交
+        uploadForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const files = fileInput.files;
+            if (files.length === 0) {
+                status.textContent = '请先选择或拖拽文件';
+                status.style.color = 'red';
+                return;
+            }
+
+            // 循环上传每个文件
+            uploadFiles(files);
+        });
+
+        async function uploadFiles(files) {
+            status.textContent = '正在上传...';
+            status.style.color = '#0066cc';
+            progressContainer.style.display = 'block';
+            
+            let successCount = 0;
+            
+            for (let i = 0; i < files.length; i++) {
+                const formData = new FormData();
+                formData.append('file', files[i]);
+                
+                try {
+                    const response = await new Promise((resolve, reject) => {
+                        const xhr = new XMLHttpRequest();
+                        xhr.open('POST', '/upload', true);
+                        
+                        xhr.upload.onprogress = (e) => {
+                            if (e.lengthComputable) {
+                                const percentComplete = Math.round((e.loaded / e.total) * 100);
+                                // 这里简化处理，显示当前文件的进度
+                                progressBar.style.width = percentComplete + '%';
+                                progressBar.textContent = `正在上传第 ${i+1}/${files.length} 个文件: ${percentComplete}%`;
+                            }
+                        };
+                        
+                        xhr.onload = () => {
+                            if (xhr.status === 200) resolve(xhr.response);
+                            else reject(xhr.statusText);
+                        };
+                        xhr.onerror = () => reject('网络错误');
+                        xhr.send(formData);
+                    });
+                    successCount++;
+                } catch (error) {
+                    console.error('上传失败:', error);
+                }
+            }
+            
+            if (successCount === files.length) {
+                status.textContent = '所有文件上传成功！正在刷新...';
+                status.style.color = 'green';
+                setTimeout(() => window.location.reload(), 1500);
+            } else {
+                status.textContent = `上传完成，成功 ${successCount}/${files.length}`;
+                status.style.color = 'orange';
+                setTimeout(() => window.location.reload(), 2000);
+            }
+        }
+    </script>
 </body>
 </html>
