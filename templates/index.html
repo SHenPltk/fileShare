@@ -10,36 +10,31 @@
         h1 { color: #1877f2; text-align: center; margin-bottom: 10px; }
         .ip-info { text-align: center; color: #65676b; margin-bottom: 20px; font-size: 0.9em; }
         
-        /* 面包屑导航 */
-        .breadcrumb { margin-bottom: 20px; padding: 10px 15px; background: #f8f9fa; border-radius: 8px; font-size: 0.95em; }
+        .breadcrumb { margin-bottom: 20px; padding: 12px 15px; background: #f8f9fa; border-radius: 8px; font-size: 0.95em; display: flex; align-items: center; }
         .breadcrumb a { color: #1877f2; text-decoration: none; font-weight: 500; }
         .breadcrumb a:hover { text-decoration: underline; }
         .breadcrumb .separator { margin: 0 8px; color: #bec3c9; }
-        .breadcrumb .current { color: #65676b; }
-
-        .toolbar { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
         
-        .upload-box { 
+        .upload-area { 
             border: 2px dashed #1877f2; 
-            padding: 30px; 
+            padding: 40px; 
             text-align: center; 
             margin-bottom: 20px; 
             border-radius: 12px;
             background-color: #f7f9fc;
             position: relative;
-            cursor: pointer;
+            transition: all 0.3s ease;
         }
-        .upload-box.dragover { background-color: #e7f3ff; border-color: #166fe5; }
+        .upload-area.dragover { background-color: #e7f3ff; border-color: #166fe5; transform: scale(1.01); }
         
-        #file-input, #folder-input { position: absolute; width: 100%; height: 100%; top: 0; left: 0; opacity: 0; cursor: pointer; z-index: 5; display: none; }
+        #file-input { position: absolute; width: 100%; height: 100%; top: 0; left: 0; opacity: 0; cursor: pointer; z-index: 5; }
         
-        .btn { padding: 10px 20px; border-radius: 6px; border: none; font-weight: 600; cursor: pointer; transition: all 0.2s; font-size: 14px; display: inline-flex; align-items: center; gap: 8px; }
+        .toolbar { display: flex; gap: 10px; margin-bottom: 20px; justify-content: center; }
+        .btn { padding: 10px 20px; border-radius: 6px; border: none; font-weight: 600; cursor: pointer; transition: all 0.2s; font-size: 14px; display: inline-flex; align-items: center; gap: 8px; z-index: 10; position: relative; }
         .btn-primary { background-color: #1877f2; color: white; }
         .btn-primary:hover { background-color: #166fe5; }
         .btn-outline { background-color: white; color: #1877f2; border: 1px solid #1877f2; }
         .btn-outline:hover { background-color: #f0f7ff; }
-        .btn-danger { background-color: #fde8e8; color: #d93025; }
-        .btn-danger:hover { background-color: #fbd5d5; }
 
         .file-list { border: 1px solid #e4e6eb; border-radius: 8px; overflow: hidden; }
         .file-item { 
@@ -48,23 +43,24 @@
             justify-content: space-between; 
             align-items: center;
             border-bottom: 1px solid #e4e6eb;
-            transition: background-color 0.2s;
         }
         .file-item:last-child { border-bottom: none; }
         .file-item:hover { background-color: #f8f9fa; }
         
-        .file-info { display: flex; align-items: center; flex-grow: 1; gap: 12px; text-decoration: none; color: inherit; }
-        .file-icon { font-size: 1.4em; }
-        .file-name { font-weight: 500; color: #050505; }
-        .file-item.is-dir .file-name { color: #1877f2; }
+        .file-info { display: flex; align-items: center; flex-grow: 1; gap: 12px; text-decoration: none; color: inherit; overflow: hidden; }
+        .file-icon { font-size: 1.4em; flex-shrink: 0; }
+        .file-name { font-weight: 500; color: #050505; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .is-dir .file-name { color: #1877f2; }
         
-        .actions { display: flex; gap: 8px; }
-        .action-icon { padding: 6px; border-radius: 6px; cursor: pointer; text-decoration: none; font-size: 1.1em; }
-        .action-icon:hover { background-color: #f0f2f5; }
+        .actions { display: flex; gap: 12px; margin-left: 15px; }
+        .action-btn { cursor: pointer; font-size: 1.1em; text-decoration: none; padding: 5px; border-radius: 4px; transition: background 0.2s; border: none; background: none; }
+        .action-btn:hover { background-color: #f0f2f5; }
+        .delete-btn { color: #d93025; }
+        .delete-btn:hover { background-color: #fde8e8; }
 
-        .status { font-weight: 600; margin-top: 15px; text-align: center; min-height: 1.5em; font-size: 0.9em; }
+        .status-container { margin-top: 15px; text-align: center; }
         .progress-container { width: 100%; background-color: #e4e6eb; border-radius: 10px; margin-top: 10px; display: none; overflow: hidden; }
-        .progress-bar { width: 0%; height: 8px; background-color: #28a745; transition: width 0.3s ease; }
+        .progress-bar { width: 0%; height: 8px; background-color: #28a745; transition: width 0.1s; }
     </style>
 </head>
 <body>
@@ -72,7 +68,6 @@
         <h1>📁 局域网文件共享</h1>
         <div class="ip-info">当前 IP: <strong>{{ ip }}</strong></div>
         
-        <!-- 面包屑导航 -->
         <div class="breadcrumb">
             <a href="/">🏠 根目录</a>
             {% for crumb in breadcrumbs %}
@@ -81,22 +76,28 @@
             {% endfor %}
         </div>
 
-        <!-- 工具栏 -->
+        <div class="upload-area" id="drop-zone">
+            <input type="file" id="file-input" multiple>
+            <div id="upload-prompt">
+                <div style="font-size: 48px; margin-bottom: 10px;">☁️</div>
+                <p><strong>拖拽文件或文件夹到此处</strong></p>
+                <p style="color: #65676b; font-size: 0.9em;">或者点击此处选择文件</p>
+                <p id="selected-info" style="color: #1877f2; font-weight: bold; margin-top: 10px;"></p>
+            </div>
+        </div>
+
         <div class="toolbar">
-            <button class="btn btn-primary" onclick="document.getElementById('file-input').click()">📄 上传文件</button>
-            <button class="btn btn-outline" onclick="document.getElementById('folder-input').click()">📁 上传文件夹</button>
+            <button class="btn btn-primary" id="start-upload-btn">🚀 开始上传</button>
             <button class="btn btn-outline" onclick="createNewFolder()">➕ 新建文件夹</button>
-            <input type="file" id="file-input" multiple onchange="handleFiles(this.files)">
-            <input type="file" id="folder-input" webkitdirectory directory multiple onchange="handleFiles(this.files)">
         </div>
 
-        <!-- 上传进度 -->
-        <div class="progress-container" id="progress-container">
-            <div class="progress-bar" id="progress-bar"></div>
+        <div class="status-container">
+            <div class="progress-container" id="progress-container">
+                <div class="progress-bar" id="progress-bar"></div>
+            </div>
+            <div id="status" style="font-weight: 600; font-size: 0.9em;"></div>
         </div>
-        <div class="status" id="status"></div>
 
-        <!-- 文件列表 -->
         <div class="file-list">
             {% if current_path %}
                 <div class="file-item">
@@ -118,9 +119,9 @@
                         </a>
                         <div class="actions">
                             {% if not item.is_dir %}
-                                <a href="/download/{{ item.rel_path }}" download class="action-icon" title="下载">💾</a>
+                                <a href="/download/{{ item.rel_path }}" download class="action-btn" title="下载">💾</a>
                             {% endif %}
-                            <span class="action-icon" onclick="deleteItem('{{ item.rel_path }}', '{{ item.name }}')" title="删除" style="color: #d93025;">🗑️</span>
+                            <button onclick="deleteItem('{{ item.rel_path }}', '{{ item.name }}')" class="action-btn delete-btn" title="删除">🗑️</button>
                         </div>
                     </div>
                 {% endfor %}
@@ -131,16 +132,49 @@
     </div>
 
     <script>
+        const dropZone = document.getElementById('drop-zone');
+        const fileInput = document.getElementById('file-input');
+        const startUploadBtn = document.getElementById('start-upload-btn');
         const status = document.getElementById('status');
         const progressBar = document.getElementById('progress-bar');
         const progressContainer = document.getElementById('progress-container');
+        const selectedInfo = document.getElementById('selected-info');
         const currentPath = "{{ current_path }}";
 
-        async function handleFiles(files) {
-            if (files.length === 0) return;
-            
-            status.textContent = '🚀 准备上传...';
-            status.style.color = '#1877f2';
+        // 拖拽处理
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(name => {
+            dropZone.addEventListener(name, e => { e.preventDefault(); e.stopPropagation(); });
+        });
+
+        ['dragenter', 'dragover'].forEach(name => {
+            dropZone.addEventListener(name, () => dropZone.classList.add('dragover'));
+        });
+
+        ['dragleave', 'drop'].forEach(name => {
+            dropZone.addEventListener(name, () => dropZone.classList.remove('dragover'));
+        });
+
+        fileInput.addEventListener('change', () => {
+            if (fileInput.files.length > 0) {
+                selectedInfo.textContent = `已选择 ${fileInput.files.length} 个项目`;
+            }
+        });
+
+        dropZone.addEventListener('drop', e => {
+            const files = e.dataTransfer.files;
+            fileInput.files = files;
+            selectedInfo.textContent = `已选择 ${files.length} 个项目`;
+        });
+
+        startUploadBtn.addEventListener('click', async () => {
+            const files = fileInput.files;
+            if (files.length === 0) {
+                status.textContent = '❌ 请先选择或拖拽文件';
+                status.style.color = '#d93025';
+                return;
+            }
+
+            startUploadBtn.disabled = true;
             progressContainer.style.display = 'block';
             
             let successCount = 0;
@@ -149,11 +183,12 @@
                 formData.append('file', files[i]);
                 formData.append('path', currentPath);
                 
-                // 如果是文件夹上传，保留相对路径
+                // 尝试获取相对路径（用于文件夹拖拽）
+                const relPath = files[i].webkitRelativePath || files[i].name;
                 if (files[i].webkitRelativePath) {
                     formData.append('webkitRelativePath', files[i].webkitRelativePath);
                 }
-                
+
                 try {
                     await new Promise((resolve, reject) => {
                         const xhr = new XMLHttpRequest();
@@ -173,29 +208,35 @@
                 } catch (e) { console.error(e); }
             }
             
-            status.textContent = successCount === files.length ? '✅ 上传成功！' : `⚠️ 完成，成功 ${successCount}/${files.length}`;
+            status.textContent = '✅ 上传完成！正在刷新...';
             setTimeout(() => window.location.reload(), 1000);
-        }
+        });
 
         async function deleteItem(relPath, name) {
-            if (!confirm(`确定要删除 "${name}" 吗？${relPath.includes('/') ? '\n警告：如果是文件夹，其内部所有内容都将被删除！' : ''}`)) return;
+            if (!confirm(`确定要删除 "${name}" 吗？\n如果是文件夹，其内部所有内容都将被永久删除！`)) return;
             
             try {
-                const response = await fetch(`/delete/${encodeURIComponent(relPath)}`, { method: 'DELETE' });
-                if (response.ok) window.location.reload();
-                else alert('删除失败');
+                // 对路径进行编码，处理特殊字符和斜杠
+                const encodedPath = relPath.split('/').map(encodeURIComponent).join('/');
+                const response = await fetch(`/delete/${encodedPath}`, { method: 'DELETE' });
+                if (response.ok) {
+                    window.location.reload();
+                } else {
+                    const errorText = await response.text();
+                    alert('删除失败: ' + errorText);
+                }
             } catch (e) { alert('网络错误'); }
         }
 
         async function createNewFolder() {
             const dirname = prompt("请输入新文件夹名称:");
-            if (!dirname) return;
+            if (!dirname || dirname.trim() === "") return;
             
             try {
                 const response = await fetch('/mkdir', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ path: currentPath, dirname: dirname })
+                    body: JSON.stringify({ path: currentPath, dirname: dirname.trim() })
                 });
                 if (response.ok) window.location.reload();
                 else alert('创建失败');
