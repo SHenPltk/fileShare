@@ -5,65 +5,63 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
-        :root { --primary: #1877f2; --bg: #f0f2f5; --text: #1c1e21; --danger: #d93025; }
-        body { font-family: 'Segoe UI', system-ui, sans-serif; margin: 0; padding: 20px; background: var(--bg); color: var(--text); }
+        :root { --primary: #1877f2; --bg: #f0f2f5; --text: #1c1e21; --danger: #d93025; --selected: #e7f3ff; }
+        body { font-family: 'Segoe UI', system-ui, sans-serif; margin: 0; padding: 20px; background: var(--bg); color: var(--text); user-select: none; }
         .container { max-width: 1000px; margin: 0 auto; background: white; padding: 25px; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
         
-        /* 头部与导航 */
         h1 { color: var(--primary); text-align: center; margin: 0 0 10px; }
-        .ip-info { text-align: center; color: #65676b; margin-bottom: 20px; font-size: 0.9em; }
+        .ip-info { text-align: center; color: #65676b; margin-bottom: 20px; font-size: 0.85em; }
+        
         .breadcrumb { margin-bottom: 15px; padding: 10px; background: #f8f9fa; border-radius: 8px; display: flex; align-items: center; font-size: 0.9em; }
         .breadcrumb a { color: var(--primary); text-decoration: none; font-weight: 500; }
         .breadcrumb .sep { margin: 0 8px; color: #bec3c9; }
 
-        /* 上传区域 */
-        .upload-area { border: 2px dashed var(--primary); padding: 30px; text-align: center; margin-bottom: 20px; border-radius: 12px; background: #f7f9fc; position: relative; cursor: pointer; }
+        .batch-bar { display: none; background: var(--selected); padding: 12px 20px; border-radius: 8px; margin-bottom: 15px; align-items: center; gap: 15px; position: sticky; top: 0; z-index: 100; border: 1px solid #b3d7ff; }
+        .batch-info { font-weight: 600; color: var(--primary); flex-grow: 1; }
+
+        .clipboard-bar { display: none; background: #fff3cd; padding: 10px 20px; border-radius: 8px; margin-bottom: 15px; align-items: center; gap: 15px; border: 1px solid #ffeeba; }
+
+        .upload-area { border: 2px dashed var(--primary); padding: 25px; text-align: center; margin-bottom: 20px; border-radius: 12px; background: #f7f9fc; position: relative; cursor: pointer; }
         .upload-area.dragover { background: #e7f3ff; border-color: #166fe5; }
         #file-input { position: absolute; inset: 0; opacity: 0; cursor: pointer; z-index: 5; }
 
-        /* 批量操作栏 */
-        .batch-bar { display: none; background: #e7f3ff; padding: 12px 20px; border-radius: 8px; margin-bottom: 15px; align-items: center; gap: 15px; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
-        .batch-info { font-weight: 600; color: var(--primary); flex-grow: 1; }
-
-        /* 工具栏 */
-        .toolbar { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
-        .btn { padding: 8px 16px; border-radius: 6px; border: none; font-weight: 600; cursor: pointer; transition: 0.2s; font-size: 14px; display: inline-flex; align-items: center; gap: 6px; }
+        .toolbar { display: flex; gap: 10px; margin-bottom: 20px; justify-content: center; }
+        .btn { padding: 8px 16px; border-radius: 6px; border: none; font-weight: 600; cursor: pointer; transition: 0.2s; font-size: 13px; display: inline-flex; align-items: center; gap: 6px; }
         .btn-primary { background: var(--primary); color: white; }
         .btn-outline { background: white; color: var(--primary); border: 1px solid var(--primary); }
         .btn-danger { background: #fde8e8; color: var(--danger); }
-        .btn:hover { opacity: 0.85; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
-        /* 文件列表 */
-        .file-list { border: 1px solid #e4e6eb; border-radius: 8px; }
-        .file-header { display: flex; padding: 12px 15px; background: #f8f9fa; border-bottom: 1px solid #e4e6eb; font-weight: 600; font-size: 0.9em; color: #65676b; }
-        .file-item { display: flex; padding: 10px 15px; align-items: center; border-bottom: 1px solid #e4e6eb; transition: 0.2s; }
+        .file-list { border: 1px solid #e4e6eb; border-radius: 8px; background: white; }
+        .file-header { display: flex; padding: 10px 15px; background: #f8f9fa; border-bottom: 1px solid #e4e6eb; font-weight: 600; font-size: 0.85em; color: #65676b; }
+        .file-item { display: flex; padding: 10px 15px; align-items: center; border-bottom: 1px solid #e4e6eb; transition: 0.1s; cursor: default; }
         .file-item:last-child { border-bottom: none; }
-        .file-item:hover { background: #f8f9fa; }
+        .file-item.selected { background: var(--selected); }
+        .file-item:hover:not(.selected) { background: #f8f9fa; }
         
         .col-check { width: 30px; flex-shrink: 0; }
-        .col-info { flex-grow: 1; display: flex; align-items: center; gap: 12px; overflow: hidden; text-decoration: none; color: inherit; }
-        .col-actions { width: 150px; display: flex; justify-content: flex-end; gap: 10px; }
+        .col-info { flex-grow: 1; display: flex; align-items: center; gap: 12px; overflow: hidden; }
+        .col-actions { width: 120px; display: flex; justify-content: flex-end; gap: 8px; }
         
-        .file-icon { font-size: 1.4em; }
+        .file-icon { font-size: 1.3em; flex-shrink: 0; }
         .file-name { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .is-dir .file-name { color: var(--primary); }
+        .is-dir .file-name { color: var(--primary); cursor: pointer; }
+        .is-dir .file-name:hover { text-decoration: underline; }
 
         .action-btn { cursor: pointer; font-size: 1.1em; padding: 5px; border-radius: 4px; border: none; background: none; color: #65676b; }
-        .action-btn:hover { background: #f0f2f5; color: var(--primary); }
-        .action-btn.del:hover { color: var(--danger); background: #fde8e8; }
+        .action-btn:hover { background: #e4e6eb; color: var(--primary); }
 
-        /* 进度条 */
         .progress-container { width: 100%; background: #e4e6eb; border-radius: 10px; margin-top: 10px; display: none; overflow: hidden; }
         .progress-bar { width: 0%; height: 6px; background: #28a745; transition: width 0.1s; }
         
-        /* 剪贴板提示 */
-        .clipboard-bar { display: none; background: #fff3cd; padding: 10px 20px; border-radius: 8px; margin-bottom: 15px; align-items: center; gap: 15px; border: 1px solid #ffeeba; }
+        .shortcut-tip { text-align: center; font-size: 0.8em; color: #8a8d91; margin-top: 15px; }
+        kbd { background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 3px; padding: 1px 4px; font-size: 0.9em; }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>📁 局域网文件共享</h1>
-        <div class="ip-info">当前 IP: <strong>{{ ip }}</strong></div>
+        <div class="ip-info">局域网访问: <strong>http://{{ ip }}:5000</strong></div>
         
         <div class="breadcrumb">
             <a href="/">🏠 根目录</a>
@@ -73,17 +71,15 @@
             {% endfor %}
         </div>
 
-        <!-- 批量操作栏 -->
         <div class="batch-bar" id="batch-bar">
             <span class="batch-info" id="batch-info">已选择 0 个项目</span>
-            <button class="btn btn-primary" onclick="batchDownload()">📥 批量下载</button>
+            <button class="btn btn-primary" onclick="batchDownload()">📥 下载</button>
             <button class="btn btn-outline" onclick="copyToClipboard('copy')">📋 复制</button>
             <button class="btn btn-outline" onclick="copyToClipboard('move')">✂️ 剪切</button>
             <button class="btn btn-danger" onclick="batchDelete()">🗑️ 删除</button>
             <button class="btn" onclick="clearSelection()">取消</button>
         </div>
 
-        <!-- 剪贴板操作栏 -->
         <div class="clipboard-bar" id="clipboard-bar">
             <span style="flex-grow: 1;" id="clipboard-info"></span>
             <button class="btn btn-primary" onclick="pasteItems()">📋 粘贴到此处</button>
@@ -92,9 +88,9 @@
 
         <div class="upload-area" id="drop-zone">
             <input type="file" id="file-input" multiple>
-            <div style="font-size: 40px;">☁️</div>
-            <p><strong>拖拽文件或文件夹到此处</strong></p>
-            <p id="selected-count" style="color: var(--primary); font-weight: bold;"></p>
+            <div style="font-size: 32px;">☁️</div>
+            <p style="margin: 5px 0;"><strong>拖拽文件或文件夹到此处</strong></p>
+            <p id="selected-count" style="color: var(--primary); font-weight: bold; font-size: 0.9em; margin: 0;"></p>
         </div>
 
         <div class="toolbar">
@@ -105,7 +101,7 @@
         <div class="progress-container" id="progress-container">
             <div class="progress-bar" id="progress-bar"></div>
         </div>
-        <div id="status" style="text-align: center; font-size: 0.9em; margin: 10px 0;"></div>
+        <div id="status" style="text-align: center; font-size: 0.85em; margin: 5px 0; min-height: 1.2em;"></div>
 
         <div class="file-list">
             <div class="file-header">
@@ -118,7 +114,7 @@
                 <div class="file-item">
                     <div class="col-check"></div>
                     {% set parent_path = current_path.rsplit('/', 1)[0] if '/' in current_path else '' %}
-                    <a href="{{ '/view/' + parent_path if parent_path else '/' }}" class="col-info">
+                    <a href="{{ '/view/' + parent_path if parent_path else '/' }}" class="col-info" style="text-decoration: none; color: inherit;">
                         <span class="file-icon">🔙</span>
                         <span class="file-name">.. (返回上级)</span>
                     </a>
@@ -127,33 +123,75 @@
             {% endif %}
 
             {% for item in items %}
-                <div class="file-item {{ 'is-dir' if item.is_dir else '' }}">
-                    <div class="col-check"><input type="checkbox" class="item-check" value="{{ item.rel_path }}" onclick="updateBatchBar()"></div>
-                    <a href="{{ '/view/' + item.rel_path if item.is_dir else '/download/' + item.rel_path }}" 
-                       class="col-info" {{ '' if item.is_dir else 'download' }}>
+                <div class="file-item {{ 'is-dir' if item.is_dir else '' }}" data-path="{{ item.rel_path }}" data-name="{{ item.name }}" onclick="handleItemClick(event, this)">
+                    <div class="col-check"><input type="checkbox" class="item-check" value="{{ item.rel_path }}" onclick="event.stopPropagation(); updateBatchBar();"></div>
+                    <div class="col-info">
                         <span class="file-icon">{{ '📁' if item.is_dir else '📄' }}</span>
-                        <span class="file-name">{{ item.name }}</span>
-                    </a>
+                        {% if item.is_dir %}
+                            <a href="/view/{{ item.rel_path }}" class="file-name" onclick="event.stopPropagation();">{{ item.name }}</a>
+                        {% else %}
+                            <span class="file-name">{{ item.name }}</span>
+                        {% endif %}
+                    </div>
                     <div class="col-actions">
-                        <a href="/download/{{ item.rel_path }}" download class="action-btn" title="下载">📥</a>
-                        <button onclick="renameItem('{{ item.rel_path }}', '{{ item.name }}')" class="action-btn" title="重命名">✏️</button>
-                        <button onclick="deleteItem('{{ item.rel_path }}', '{{ item.name }}')" class="action-btn del" title="删除">🗑️</button>
+                        <button onclick="event.stopPropagation(); triggerDownload('{{ item.rel_path }}')" class="action-btn" title="下载">📥</button>
+                        <button onclick="event.stopPropagation(); renameItem('{{ item.rel_path }}', '{{ item.name }}')" class="action-btn" title="重命名">✏️</button>
                     </div>
                 </div>
             {% endfor %}
+        </div>
+        
+        <div class="shortcut-tip">
+            快捷键: <kbd>F2</kbd> 重命名 | <kbd>Ctrl+C</kbd> 复制 | <kbd>Ctrl+X</kbd> 剪切 | <kbd>Ctrl+V</kbd> 粘贴 | <kbd>Del</kbd> 删除
         </div>
     </div>
 
     <script>
         const currentPath = "{{ current_path }}";
-        let clipboard = { op: null, paths: [] };
+        let clipboard = JSON.parse(localStorage.getItem('fs_clipboard') || '{"op":null,"paths":[]}');
 
-        // 基础交互
+        // 初始化剪贴板状态
+        if (clipboard.op) {
+            showClipboardBar();
+        }
+
+        // 快捷键监听
+        window.addEventListener('keydown', e => {
+            const selected = Array.from(document.querySelectorAll('.item-check:checked')).map(c => c.value);
+            
+            if (e.key === 'F2' && selected.length === 1) {
+                e.preventDefault();
+                const item = document.querySelector(`.item-check[value="${selected[0]}"]`).closest('.file-item');
+                renameItem(selected[0], item.dataset.name);
+            } else if (e.ctrlKey && e.key === 'c' && selected.length > 0) {
+                copyToClipboard('copy');
+            } else if (e.ctrlKey && e.key === 'x' && selected.length > 0) {
+                copyToClipboard('move');
+            } else if (e.ctrlKey && e.key === 'v' && clipboard.op) {
+                pasteItems();
+            } else if (e.key === 'Delete' && selected.length > 0) {
+                batchDelete();
+            }
+        });
+
+        function handleItemClick(e, element) {
+            const checkbox = element.querySelector('.item-check');
+            if (e.target.tagName !== 'INPUT') {
+                checkbox.checked = !checkbox.checked;
+                element.classList.toggle('selected', checkbox.checked);
+                updateBatchBar();
+            }
+        }
+
         function updateBatchBar() {
             const checked = document.querySelectorAll('.item-check:checked');
             const bar = document.getElementById('batch-bar');
             document.getElementById('batch-info').textContent = `已选择 ${checked.length} 个项目`;
             bar.style.display = checked.length > 0 ? 'flex' : 'none';
+            
+            document.querySelectorAll('.file-item').forEach(item => {
+                item.classList.toggle('selected', item.querySelector('.item-check').checked);
+            });
         }
 
         function toggleSelectAll() {
@@ -168,17 +206,24 @@
             updateBatchBar();
         }
 
-        // 剪贴板操作
         function copyToClipboard(op) {
             const paths = Array.from(document.querySelectorAll('.item-check:checked')).map(c => c.value);
             clipboard = { op, paths };
-            document.getElementById('clipboard-info').textContent = `已${op === 'copy' ? '复制' : '剪切'} ${paths.length} 个项目`;
-            document.getElementById('clipboard-bar').style.display = 'flex';
+            localStorage.setItem('fs_clipboard', JSON.stringify(clipboard));
+            showClipboardBar();
             clearSelection();
+        }
+
+        function showClipboardBar() {
+            const bar = document.getElementById('clipboard-bar');
+            const info = document.getElementById('clipboard-info');
+            info.textContent = `已准备${clipboard.op === 'copy' ? '复制' : '剪切'} ${clipboard.paths.length} 个项目`;
+            bar.style.display = 'flex';
         }
 
         function clearClipboard() {
             clipboard = { op: null, paths: [] };
+            localStorage.removeItem('fs_clipboard');
             document.getElementById('clipboard-bar').style.display = 'none';
         }
 
@@ -191,12 +236,22 @@
             if (res.ok) {
                 clearClipboard();
                 window.location.reload();
-            } else alert('操作失败');
+            } else alert('操作失败，请检查目标路径');
         }
 
-        // 文件操作
+        function triggerDownload(path) {
+            // 使用 window.open 或 iframe 触发下载，尝试减少拦截
+            const url = `/download/${encodeURIComponent(path)}`;
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = '';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        }
+
         async function renameItem(relPath, oldName) {
-            const newName = prompt("请输入新名称:", oldName);
+            const newName = prompt("重命名:", oldName);
             if (!newName || newName === oldName) return;
             const res = await fetch('/fs_op', {
                 method: 'POST',
@@ -205,17 +260,6 @@
             });
             if (res.ok) window.location.reload();
             else alert('重命名失败');
-        }
-
-        async function deleteItem(path, name) {
-            if (confirm(`确定删除 "${name}" 吗？`)) {
-                const res = await fetch('/delete', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ paths: [path] })
-                });
-                if (res.ok) window.location.reload();
-            }
         }
 
         async function batchDelete() {
@@ -232,16 +276,7 @@
 
         function batchDownload() {
             const paths = Array.from(document.querySelectorAll('.item-check:checked')).map(c => c.value);
-            paths.forEach((path, index) => {
-                setTimeout(() => {
-                    const link = document.createElement('a');
-                    link.href = `/download/${encodeURIComponent(path)}`;
-                    link.download = '';
-                    document.body.appendChild(link);
-                    link.click();
-                    document.body.removeChild(link);
-                }, index * 500); // 间隔下载防止浏览器拦截
-            });
+            paths.forEach((path, i) => setTimeout(() => triggerDownload(path), i * 800));
         }
 
         // 上传逻辑
@@ -257,28 +292,24 @@
 
         uploadBtn.addEventListener('click', async () => {
             const files = fileInput.files;
-            if (files.length === 0) return alert('请先选择文件');
-            
+            if (files.length === 0) return;
             uploadBtn.disabled = true;
             progressContainer.style.display = 'block';
-            
             for (let i = 0; i < files.length; i++) {
                 const formData = new FormData();
                 formData.append('file', files[i]);
                 formData.append('path', currentPath);
                 if (files[i].webkitRelativePath) formData.append('webkitRelativePath', files[i].webkitRelativePath);
-
-                await new Promise((resolve) => {
+                await new Promise(r => {
                     const xhr = new XMLHttpRequest();
                     xhr.open('POST', '/upload', true);
-                    xhr.upload.onprogress = (e) => {
+                    xhr.upload.onprogress = e => {
                         if (e.lengthComputable) {
-                            const p = Math.round((e.loaded / e.total) * 100);
-                            progressBar.style.width = p + '%';
+                            progressBar.style.width = Math.round((e.loaded / e.total) * 100) + '%';
                             status.textContent = `上传中 (${i+1}/${files.length}): ${files[i].name}`;
                         }
                     };
-                    xhr.onload = resolve;
+                    xhr.onload = r;
                     xhr.send(formData);
                 });
             }
@@ -296,7 +327,6 @@
             if (res.ok) window.location.reload();
         }
 
-        // 拖拽支持
         const dropZone = document.getElementById('drop-zone');
         ['dragenter', 'dragover'].forEach(n => dropZone.addEventListener(n, e => {
             e.preventDefault(); dropZone.classList.add('dragover');
