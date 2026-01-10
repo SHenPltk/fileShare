@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>登录 - 局域网文件共享</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body { font-family: 'Segoe UI', system-ui, sans-serif; background: #f0f2f5; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+        .login-card { background: white; padding: 40px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); width: 100%; max-width: 360px; text-align: center; }
+        h1 { color: #1877f2; margin-bottom: 25px; font-size: 24px; }
+        input { width: 100%; padding: 12px; margin-bottom: 15px; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; font-size: 14px; }
+        button { width: 100%; padding: 12px; background: #1877f2; color: white; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 16px; }
+        button:hover { background: #166fe5; }
+        .error { color: #d93025; font-size: 13px; margin-bottom: 15px; }
+        .info { color: #65676b; font-size: 12px; margin-top: 20px; }
+    </style>
+</head>
+<body>
+    <div class="login-card">
+        <h1>📁 文件共享登录</h1>
+        {% if error %}
+            <div class="error">{{ error }}</div>
+        {% endif %}
+        <form method="POST">
+            <input type="text" name="username" placeholder="用户名" required autofocus>
+            <input type="password" name="password" placeholder="密码" required>
+            <button type="submit">登录</button>
+        </form>
+        <a href="/register" style="color: #1877f2; text-decoration: none; font-size: 14px; display: block; margin-top: 15px;">还没有账号？去注册</a>
+        <div class="info">
+            默认账号:<br>
+            管理员: admin / admin123<br>
+            普通用户: user / user123<br>
+            访客: guest / guest123
+        </div>
+    </div>
+</body>
+</html>
