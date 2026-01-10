@@ -21,11 +21,10 @@
 
         .clipboard-bar { display: none; background: #fff3cd; padding: 10px 20px; border-radius: 8px; margin-bottom: 15px; align-items: center; gap: 15px; border: 1px solid #ffeeba; }
 
-        .upload-area { border: 2px dashed var(--primary); padding: 25px; text-align: center; margin-bottom: 20px; border-radius: 12px; background: #f7f9fc; position: relative; cursor: pointer; }
-        .upload-area.dragover { background: #e7f3ff; border-color: #166fe5; }
-        #file-input { position: absolute; inset: 0; opacity: 0; cursor: pointer; z-index: 5; }
-
-        .toolbar { display: flex; gap: 10px; margin-bottom: 20px; justify-content: center; }
+        .upload-area { border: 2px dashed var(--primary); padding: 30px; text-align: center; margin-bottom: 20px; border-radius: 12px; background: #f7f9fc; position: relative; transition: 0.3s; }
+        .upload-area.dragover { background: #e7f3ff; border-color: #166fe5; transform: scale(1.01); }
+        
+        .toolbar { display: flex; gap: 10px; margin-bottom: 20px; justify-content: center; flex-wrap: wrap; }
         .btn { padding: 8px 16px; border-radius: 6px; border: none; font-weight: 600; cursor: pointer; transition: 0.2s; font-size: 13px; display: inline-flex; align-items: center; gap: 6px; }
         .btn-primary { background: var(--primary); color: white; }
         .btn-outline { background: white; color: var(--primary); border: 1px solid var(--primary); }
@@ -87,15 +86,21 @@
         </div>
 
         <div class="upload-area" id="drop-zone">
-            <input type="file" id="file-input" multiple>
-            <div style="font-size: 32px;">☁️</div>
-            <p style="margin: 5px 0;"><strong>拖拽文件或文件夹到此处</strong></p>
-            <p id="selected-count" style="color: var(--primary); font-weight: bold; font-size: 0.9em; margin: 0;"></p>
+            <div style="font-size: 40px; margin-bottom: 10px;">☁️</div>
+            <p style="margin: 5px 0;"><strong>拖拽文件或文件夹到此处上传</strong></p>
+            <p style="color: #65676b; font-size: 0.85em;">支持多文件及文件夹递归上传</p>
+            <p id="selected-count" style="color: var(--primary); font-weight: bold; font-size: 0.9em; margin-top: 10px;"></p>
         </div>
 
         <div class="toolbar">
-            <button class="btn btn-primary" id="upload-btn">🚀 开始上传</button>
+            <button class="btn btn-primary" onclick="document.getElementById('file-input').click()">📄 选择文件</button>
+            <button class="btn btn-primary" onclick="document.getElementById('folder-input').click()">📁 选择文件夹</button>
             <button class="btn btn-outline" onclick="createNewFolder()">➕ 新建文件夹</button>
+            <button class="btn btn-danger" id="start-upload-btn" style="display: none;">🚀 开始上传</button>
+            
+            <!-- 隐藏的输入框 -->
+            <input type="file" id="file-input" multiple style="display: none;">
+            <input type="file" id="folder-input" webkitdirectory directory multiple style="display: none;">
         </div>
 
         <div class="progress-container" id="progress-container">
@@ -149,16 +154,14 @@
     <script>
         const currentPath = "{{ current_path }}";
         let clipboard = JSON.parse(localStorage.getItem('fs_clipboard') || '{"op":null,"paths":[]}');
+        let pendingFiles = [];
 
-        // 初始化剪贴板状态
-        if (clipboard.op) {
-            showClipboardBar();
-        }
+        if (clipboard.op) showClipboardBar();
 
-        // 快捷键监听
+        // 快捷键
         window.addEventListener('keydown', e => {
+            if (e.target.tagName === 'INPUT') return;
             const selected = Array.from(document.querySelectorAll('.item-check:checked')).map(c => c.value);
-            
             if (e.key === 'F2' && selected.length === 1) {
                 e.preventDefault();
                 const item = document.querySelector(`.item-check[value="${selected[0]}"]`).closest('.file-item');
@@ -176,7 +179,7 @@
 
         function handleItemClick(e, element) {
             const checkbox = element.querySelector('.item-check');
-            if (e.target.tagName !== 'INPUT') {
+            if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'A') {
                 checkbox.checked = !checkbox.checked;
                 element.classList.toggle('selected', checkbox.checked);
                 updateBatchBar();
@@ -185,10 +188,8 @@
 
         function updateBatchBar() {
             const checked = document.querySelectorAll('.item-check:checked');
-            const bar = document.getElementById('batch-bar');
+            document.getElementById('batch-bar').style.display = checked.length > 0 ? 'flex' : 'none';
             document.getElementById('batch-info').textContent = `已选择 ${checked.length} 个项目`;
-            bar.style.display = checked.length > 0 ? 'flex' : 'none';
-            
             document.querySelectorAll('.file-item').forEach(item => {
                 item.classList.toggle('selected', item.querySelector('.item-check').checked);
             });
@@ -215,10 +216,8 @@
         }
 
         function showClipboardBar() {
-            const bar = document.getElementById('clipboard-bar');
-            const info = document.getElementById('clipboard-info');
-            info.textContent = `已准备${clipboard.op === 'copy' ? '复制' : '剪切'} ${clipboard.paths.length} 个项目`;
-            bar.style.display = 'flex';
+            document.getElementById('clipboard-info').textContent = `已准备${clipboard.op === 'copy' ? '复制' : '剪切'} ${clipboard.paths.length} 个项目`;
+            document.getElementById('clipboard-bar').style.display = 'flex';
         }
 
         function clearClipboard() {
@@ -233,17 +232,13 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ op: clipboard.op, src_paths: clipboard.paths, dest_dir: currentPath })
             });
-            if (res.ok) {
-                clearClipboard();
-                window.location.reload();
-            } else alert('操作失败，请检查目标路径');
+            if (res.ok) { clearClipboard(); window.location.reload(); }
+            else alert('操作失败');
         }
 
         function triggerDownload(path) {
-            // 使用 window.open 或 iframe 触发下载，尝试减少拦截
-            const url = `/download/${encodeURIComponent(path)}`;
             const a = document.createElement('a');
-            a.href = url;
+            a.href = `/download/${encodeURIComponent(path)}`;
             a.download = '';
             document.body.appendChild(a);
             a.click();
@@ -259,7 +254,6 @@
                 body: JSON.stringify({ op: 'rename', src_paths: [relPath], new_name: newName })
             });
             if (res.ok) window.location.reload();
-            else alert('重命名失败');
         }
 
         async function batchDelete() {
@@ -281,40 +275,95 @@
 
         // 上传逻辑
         const fileInput = document.getElementById('file-input');
-        const uploadBtn = document.getElementById('upload-btn');
+        const folderInput = document.getElementById('folder-input');
+        const startUploadBtn = document.getElementById('start-upload-btn');
+        const status = document.getElementById('status');
         const progressBar = document.getElementById('progress-bar');
         const progressContainer = document.getElementById('progress-container');
-        const status = document.getElementById('status');
 
-        fileInput.addEventListener('change', () => {
-            document.getElementById('selected-count').textContent = `已选择 ${fileInput.files.length} 个项目`;
-        });
+        function updatePendingFiles(files) {
+            pendingFiles = Array.from(files);
+            document.getElementById('selected-count').textContent = `已准备好 ${pendingFiles.length} 个项目`;
+            startUploadBtn.style.display = pendingFiles.length > 0 ? 'inline-flex' : 'none';
+        }
 
-        uploadBtn.addEventListener('click', async () => {
-            const files = fileInput.files;
-            if (files.length === 0) return;
-            uploadBtn.disabled = true;
+        fileInput.addEventListener('change', () => updatePendingFiles(fileInput.files));
+        folderInput.addEventListener('change', () => updatePendingFiles(folderInput.files));
+
+        startUploadBtn.addEventListener('click', async () => {
+            if (pendingFiles.length === 0) return;
+            startUploadBtn.disabled = true;
             progressContainer.style.display = 'block';
-            for (let i = 0; i < files.length; i++) {
+            
+            for (let i = 0; i < pendingFiles.length; i++) {
+                const file = pendingFiles[i];
                 const formData = new FormData();
-                formData.append('file', files[i]);
+                formData.append('file', file);
                 formData.append('path', currentPath);
-                if (files[i].webkitRelativePath) formData.append('webkitRelativePath', files[i].webkitRelativePath);
-                await new Promise(r => {
+                if (file.webkitRelativePath) {
+                    formData.append('webkitRelativePath', file.webkitRelativePath);
+                }
+
+                await new Promise(resolve => {
                     const xhr = new XMLHttpRequest();
                     xhr.open('POST', '/upload', true);
                     xhr.upload.onprogress = e => {
                         if (e.lengthComputable) {
-                            progressBar.style.width = Math.round((e.loaded / e.total) * 100) + '%';
-                            status.textContent = `上传中 (${i+1}/${files.length}): ${files[i].name}`;
+                            const p = Math.round((e.loaded / e.total) * 100);
+                            progressBar.style.width = p + '%';
+                            status.textContent = `上传中 (${i+1}/${pendingFiles.length}): ${file.name}`;
                         }
                     };
-                    xhr.onload = r;
+                    xhr.onload = resolve;
                     xhr.send(formData);
                 });
             }
             window.location.reload();
         });
+
+        // 拖拽上传增强
+        const dropZone = document.getElementById('drop-zone');
+        ['dragenter', 'dragover'].forEach(n => dropZone.addEventListener(n, e => {
+            e.preventDefault(); dropZone.classList.add('dragover');
+        }));
+        ['dragleave', 'drop'].forEach(n => dropZone.addEventListener(n, e => {
+            e.preventDefault(); dropZone.classList.remove('dragover');
+        }));
+
+        dropZone.addEventListener('drop', async e => {
+            e.preventDefault();
+            const items = e.dataTransfer.items;
+            pendingFiles = [];
+            
+            status.textContent = '正在扫描文件夹...';
+            
+            for (let i = 0; i < items.length; i++) {
+                const item = items[i].webkitGetAsEntry();
+                if (item) {
+                    await scanEntry(item, "");
+                }
+            }
+            
+            updatePendingFiles(pendingFiles);
+            status.textContent = '扫描完成，点击“开始上传”按钮开始。';
+        });
+
+        async function scanEntry(entry, path) {
+            if (entry.isFile) {
+                const file = await new Promise(resolve => entry.file(resolve));
+                // 模拟 webkitRelativePath
+                Object.defineProperty(file, 'webkitRelativePath', {
+                    value: path + file.name
+                });
+                pendingFiles.push(file);
+            } else if (entry.isDirectory) {
+                const reader = entry.createReader();
+                const entries = await new Promise(resolve => reader.readEntries(resolve));
+                for (const child of entries) {
+                    await scanEntry(child, path + entry.name + "/");
+                }
+            }
+        }
 
         async function createNewFolder() {
             const name = prompt("文件夹名称:");
@@ -326,18 +375,6 @@
             });
             if (res.ok) window.location.reload();
         }
-
-        const dropZone = document.getElementById('drop-zone');
-        ['dragenter', 'dragover'].forEach(n => dropZone.addEventListener(n, e => {
-            e.preventDefault(); dropZone.classList.add('dragover');
-        }));
-        ['dragleave', 'drop'].forEach(n => dropZone.addEventListener(n, e => {
-            e.preventDefault(); dropZone.classList.remove('dragover');
-        }));
-        dropZone.addEventListener('drop', e => {
-            fileInput.files = e.dataTransfer.files;
-            document.getElementById('selected-count').textContent = `已选择 ${fileInput.files.length} 个项目`;
-        });
     </script>
 </body>
 </html>
