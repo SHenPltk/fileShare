@@ -267,6 +267,18 @@
             if (res.ok) window.location.reload();
         }
 
+        async function deleteItem(path, name) {
+            if (confirm(`确定删除 "${name}" 吗？`)) {
+                const res = await fetch('/delete', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ paths: [path] })
+                });
+                if (res.ok) window.location.reload();
+                else alert('删除失败');
+            }
+        }
+
         async function batchDelete() {
             const paths = Array.from(document.querySelectorAll('.item-check:checked')).map(c => c.value);
             if (confirm(`确定删除选中的 ${paths.length} 个项目吗？`)) {
