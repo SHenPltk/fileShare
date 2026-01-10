@@ -141,13 +141,14 @@
                     <div class="col-actions">
                         <button onclick="event.stopPropagation(); triggerDownload('{{ item.rel_path }}')" class="action-btn" title="下载">📥</button>
                         <button onclick="event.stopPropagation(); renameItem('{{ item.rel_path }}', '{{ item.name }}')" class="action-btn" title="重命名">✏️</button>
+                        <button onclick="event.stopPropagation(); deleteItem('{{ item.rel_path }}', '{{ item.name }}')" class="action-btn del" title="删除">🗑️</button>
                     </div>
                 </div>
             {% endfor %}
         </div>
         
         <div class="shortcut-tip">
-            快捷键: <kbd>Ctrl+A</kbd> 全选 | <kbd>F2</kbd> 重命名 | <kbd>Ctrl+C</kbd> 复制 | <kbd>Ctrl+X</kbd> 剪切 | <kbd>Ctrl+V</kbd> 粘贴 | <kbd>Del</kbd> 删除
+            快捷键: <kbd>Ctrl+A</kbd> 全选 | <kbd>Esc</kbd> 取消 | <kbd>F2</kbd> 重命名 | <kbd>Ctrl+C</kbd> 复制 | <kbd>Ctrl+X</kbd> 剪切 | <kbd>Ctrl+V</kbd> 粘贴 | <kbd>Del</kbd> 删除
         </div>
     </div>
 
@@ -181,6 +182,9 @@
                 updateBatchBar();
             } else if (e.key === 'Delete' && selected.length > 0) {
                 batchDelete();
+            } else if (e.key === 'Escape') {
+                clearSelection();
+                if (clipboard.op) clearClipboard();
             }
         });
 
