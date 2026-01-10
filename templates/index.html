@@ -147,7 +147,7 @@
         </div>
         
         <div class="shortcut-tip">
-            快捷键: <kbd>F2</kbd> 重命名 | <kbd>Ctrl+C</kbd> 复制 | <kbd>Ctrl+X</kbd> 剪切 | <kbd>Ctrl+V</kbd> 粘贴 | <kbd>Del</kbd> 删除
+            快捷键: <kbd>Ctrl+A</kbd> 全选 | <kbd>F2</kbd> 重命名 | <kbd>Ctrl+C</kbd> 复制 | <kbd>Ctrl+X</kbd> 剪切 | <kbd>Ctrl+V</kbd> 粘贴 | <kbd>Del</kbd> 删除
         </div>
     </div>
 
@@ -172,6 +172,13 @@
                 copyToClipboard('move');
             } else if (e.ctrlKey && e.key === 'v' && clipboard.op) {
                 pasteItems();
+            } else if (e.ctrlKey && e.key === 'a') {
+                e.preventDefault();
+                const allCheckboxes = document.querySelectorAll('.item-check');
+                const allChecked = Array.from(allCheckboxes).every(c => c.checked);
+                allCheckboxes.forEach(c => c.checked = !allChecked);
+                document.getElementById('select-all').checked = !allChecked;
+                updateBatchBar();
             } else if (e.key === 'Delete' && selected.length > 0) {
                 batchDelete();
             }
