@@ -15,31 +15,23 @@ CORS(app)
 
 DB_PATH = "users.db"
 SHARED_FOLDER = os.path.abspath("shared_files")
-# 特权IP列表，初始包含回环地址
 SUPER_IPS = ["127.0.0.1", "::1"]
 
 def get_all_local_ips():
-    """获取本机所有网卡的IP地址"""
     ips = ["127.0.0.1"]
     try:
-        # 获取所有网卡信息
         for info in socket.getaddrinfo(socket.gethostname(), None):
             ip = info[4][0]
-            if ip not in ips:
-                ips.append(ip)
-    except:
-        pass
-    # 补充一种常用的获取局域网IP的方法
+            if ip not in ips: ips.append(ip)
+    except: pass
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.connect(("8.8.8.8", 80))
         ips.append(s.getsockname()[0])
         s.close()
-    except:
-        pass
+    except: pass
     return list(set(ips))
 
-# 启动时自动将本机所有IP加入特权列表
 SUPER_IPS.extend(get_all_local_ips())
 
 if not os.path.exists(SHARED_FOLDER):
@@ -53,23 +45,22 @@ def init_db():
                       password TEXT NOT NULL, 
                       role TEXT NOT NULL,
                       permissions TEXT NOT NULL)''')
-        admin_pw = generate_password_hash("admin123")
-        try:
-            conn.execute("INSERT INTO users (username, password, role, permissions) VALUES (?, ?, ?, ?)",
-                         ("admin", admin_pw, "admin", "view,download,upload,manage"))
-        except sqlite3.IntegrityError:
-            pass
+        # 移除默认管理员创建逻辑，仅保留表结构初始化
 
 init_db()
 
 def is_super_admin():
-    """检查是否为特权IP"""
+    """检查是否为特权IP，且未开启测试模式"""
+    # 如果 URL 中包含 test_mode=1，则暂时禁用 IP 特权，方便本机测试登录逻辑
+    if request.args.get('test_mode') == '1' or session.get('test_mode'):
+        if request.args.get('test_mode') == '1':
+            session['test_mode'] = True
+        return False
+    
     client_ip = request.remote_addr
-    # 检查客户端IP是否在特权列表中
     return client_ip in SUPER_IPS
 
 def get_current_permissions():
-    """获取当前用户的权限列表"""
     if is_super_admin():
         return ["view", "download", "upload", "manage", "admin_panel"]
     if "user" in session:
@@ -88,8 +79,7 @@ def permission_required(permission):
     def decorator(f):
         @functools.wraps(f)
         def decorated_function(*args, **kwargs):
-            if is_super_admin():
-                return f(*args, **kwargs)
+            if is_super_admin(): return f(*args, **kwargs)
             perms = get_current_permissions()
             if permission not in perms:
                 return abort(403, description=f"Missing permission: {permission}")
@@ -102,30 +92,27 @@ def get_local_ip():
     try:
         s.connect(("8.8.8.8", 80))
         ip = s.getsockname()[0]
-    except Exception:
-        ip = "127.0.0.1"
-    finally:
-        s.close()
+    except Exception: ip = "127.0.0.1"
+    finally: s.close()
     return ip
 
 def safe_join(base, *paths):
     joined = os.path.normpath(os.path.join(base, *paths))
-    if not joined.startswith(base):
-        abort(403)
+    if not joined.startswith(base): abort(403)
     return joined
 
 @app.route("/register", methods=["GET", "POST"])
 def register():
     if request.method == "POST":
-        username = request.form.get("username")
-        password = request.form.get("password")
+        username, password = request.form.get("username"), request.form.get("password")
         if not username or not password:
             return render_template("register.html", error="请填写完整信息")
         hashed_pw = generate_password_hash(password)
         try:
             with sqlite3.connect(DB_PATH) as conn:
+                # 新注册用户默认只有 view 权限，无 download/upload/manage
                 conn.execute("INSERT INTO users (username, password, role, permissions) VALUES (?, ?, ?, ?)",
-                             (username, hashed_pw, "user", "view,download"))
+                             (username, hashed_pw, "user", "view"))
             return redirect(url_for("login"))
         except sqlite3.IntegrityError:
             return render_template("register.html", error="用户名已存在")
@@ -133,18 +120,14 @@ def register():
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
-    if is_super_admin():
-        return redirect(url_for("index"))
+    if is_super_admin(): return redirect(url_for("index"))
     if request.method == "POST":
-        username = request.form.get("username")
-        password = request.form.get("password")
+        username, password = request.form.get("username"), request.form.get("password")
         with sqlite3.connect(DB_PATH) as conn:
             conn.row_factory = sqlite3.Row
             user = conn.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
         if user and check_password_hash(user["password"], password):
-            session["user"] = user["username"]
-            session["role"] = user["role"]
-            session["permissions"] = user["permissions"]
+            session["user"], session["role"], session["permissions"] = user["username"], user["role"], user["permissions"]
             return redirect(url_for("index"))
         return render_template("login.html", error="用户名或密码错误")
     return render_template("login.html")
@@ -154,12 +137,16 @@ def logout():
     session.clear()
     return redirect(url_for("login"))
 
+@app.route("/exit_test_mode")
+def exit_test_mode():
+    """退出测试模式，恢复 IP 特权"""
+    session.pop('test_mode', None)
+    return redirect(url_for("index"))
+
 @app.route("/admin/users", methods=["GET"])
 @login_required
 @permission_required("manage")
 def admin_users():
-    if not is_super_admin() and session.get("role") != "admin":
-        abort(403)
     with sqlite3.connect(DB_PATH) as conn:
         conn.row_factory = sqlite3.Row
         users = conn.execute("SELECT id, username, role, permissions FROM users").fetchall()
@@ -169,11 +156,8 @@ def admin_users():
 @login_required
 @permission_required("manage")
 def update_perms():
-    if not is_super_admin() and session.get("role") != "admin":
-        abort(403)
     data = request.get_json()
-    user_id = data.get("id")
-    new_perms = ",".join(data.get("permissions", []))
+    user_id, new_perms = data.get("id"), ",".join(data.get("permissions", []))
     with sqlite3.connect(DB_PATH) as conn:
         conn.execute("UPDATE users SET permissions = ? WHERE id = ?", (new_perms, user_id))
     return "OK", 200
@@ -185,42 +169,24 @@ def update_perms():
 @permission_required("view")
 def index(subpath=""):
     full_path = safe_join(SHARED_FOLDER, subpath)
-    if not os.path.exists(full_path):
-        return "Directory not found", 404
+    if not os.path.exists(full_path): return "Directory not found", 404
     items = []
     for name in os.listdir(full_path):
         item_path = os.path.join(full_path, name)
-        items.append({
-            "name": name,
-            "is_dir": os.path.isdir(item_path),
-            "rel_path": os.path.relpath(item_path, SHARED_FOLDER).replace("\\", "/")
-        })
+        items.append({"name": name, "is_dir": os.path.isdir(item_path), "rel_path": os.path.relpath(item_path, SHARED_FOLDER).replace("\\", "/")})
     items.sort(key=lambda x: (not x["is_dir"], x["name"].lower()))
-    
     path_parts = [p for p in subpath.split("/") if p]
-    breadcrumbs = []
-    curr_path = ""
-    for part in path_parts:
-        curr_path = os.path.join(curr_path, part).replace("\\", "/")
-        breadcrumbs.append({"name": part, "path": curr_path})
-
-    return render_template("index.html", 
-                           items=items, 
-                           ip=get_local_ip(), 
-                           current_path=subpath,
-                           breadcrumbs=breadcrumbs,
-                           user="SuperAdmin" if is_super_admin() else session.get("user"),
-                           is_super=is_super_admin(),
-                           perms=get_current_permissions())
+    breadcrumbs = [{"name": part, "path": "/".join(path_parts[:i+1])} for i, part in enumerate(path_parts)]
+    return render_template("index.html", items=items, ip=get_local_ip(), current_path=subpath, breadcrumbs=breadcrumbs, 
+                           user="SuperAdmin" if is_super_admin() else session.get("user"), is_super=is_super_admin(), 
+                           perms=get_current_permissions(), test_mode=session.get('test_mode'))
 
 @app.route("/upload", methods=["POST"])
 @login_required
 @permission_required("upload")
 def upload_file():
     file = request.files["file"]
-    subpath = request.form.get("path", "")
-    rel_path = request.form.get("webkitRelativePath", "")
-    target_path = safe_join(SHARED_FOLDER, subpath, rel_path if rel_path else file.filename)
+    target_path = safe_join(SHARED_FOLDER, request.form.get("path", ""), request.form.get("webkitRelativePath", "") or file.filename)
     os.makedirs(os.path.dirname(target_path), exist_ok=True)
     file.save(target_path)
     return "OK", 200
@@ -233,24 +199,19 @@ def download_item(filename):
     if os.path.isdir(full_path):
         memory_file = io.BytesIO()
         with zipfile.ZipFile(memory_file, 'w', zipfile.ZIP_DEFLATED) as zf:
-            for root, dirs, files in os.walk(full_path):
+            for root, _, files in os.walk(full_path):
                 for file in files:
-                    file_path = os.path.join(root, file)
-                    arcname = os.path.relpath(file_path, os.path.dirname(full_path))
-                    zf.write(file_path, arcname)
+                    fp = os.path.join(root, file)
+                    zf.write(fp, os.path.relpath(fp, os.path.dirname(full_path)))
         memory_file.seek(0)
-        response = send_file(memory_file, mimetype='application/zip', as_attachment=True, download_name=f"{os.path.basename(full_path)}.zip")
-    else:
-        response = make_response(send_from_directory(SHARED_FOLDER, filename, as_attachment=True))
-    response.headers["Content-Security-Policy"] = "upgrade-insecure-requests"
-    return response
+        return send_file(memory_file, mimetype='application/zip', as_attachment=True, download_name=f"{os.path.basename(full_path)}.zip")
+    return send_from_directory(SHARED_FOLDER, filename, as_attachment=True)
 
 @app.route("/delete", methods=["POST"])
 @login_required
 @permission_required("manage")
 def delete_items():
-    data = request.get_json()
-    for path in data.get("paths", []):
+    for path in request.get_json().get("paths", []):
         full_path = safe_join(SHARED_FOLDER, path)
         if os.path.exists(full_path):
             if os.path.isdir(full_path): shutil.rmtree(full_path)
@@ -264,17 +225,13 @@ def file_system_operation():
     data = request.get_json()
     op, src_paths, dest_dir = data.get("op"), data.get("src_paths", []), data.get("dest_dir", "")
     try:
-        if op == 'rename':
-            src = safe_join(SHARED_FOLDER, src_paths[0])
-            os.rename(src, safe_join(os.path.dirname(src), data.get("new_name")))
+        if op == 'rename': os.rename(safe_join(SHARED_FOLDER, src_paths[0]), safe_join(os.path.dirname(safe_join(SHARED_FOLDER, src_paths[0])), data.get("new_name")))
         elif op in ['move', 'copy']:
-            dest_base = safe_join(SHARED_FOLDER, dest_dir)
             for path in src_paths:
-                src = safe_join(SHARED_FOLDER, path)
-                dest = os.path.join(dest_base, os.path.basename(src))
+                src, dest = safe_join(SHARED_FOLDER, path), os.path.join(safe_join(SHARED_FOLDER, dest_dir), os.path.basename(safe_join(SHARED_FOLDER, path)))
                 if src == dest: continue
                 if op == 'move': shutil.move(src, dest)
-                else:
+                else: 
                     if os.path.isdir(src): shutil.copytree(src, dest, dirs_exist_ok=True)
                     else: shutil.copy2(src, dest)
         return "OK", 200

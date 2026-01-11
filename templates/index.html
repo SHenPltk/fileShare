@@ -63,6 +63,10 @@
             <div style="font-size: 0.9em; color: #65676b;">
                 👤 当前用户: <strong>{{ user }}</strong> 
                 {% if is_super %}<span style="color: var(--primary); font-weight: bold;">(超级管理员)</span>{% endif %}
+                {% if test_mode %}
+                    <span style="color: #d93025; font-weight: bold; margin-left: 10px;">[测试模式]</span>
+                    <a href="/exit_test_mode" style="font-size: 0.8em; color: #1877f2; margin-left: 5px;">(恢复超管)</a>
+                {% endif %}
             </div>
             <div>
                 {% if 'manage' in perms %}
