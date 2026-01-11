@@ -15,7 +15,32 @@ CORS(app)
 
 DB_PATH = "users.db"
 SHARED_FOLDER = os.path.abspath("shared_files")
-SUPER_IP = "172.0.0.1" # 特权IP
+# 特权IP列表，初始包含回环地址
+SUPER_IPS = ["127.0.0.1", "::1"]
+
+def get_all_local_ips():
+    """获取本机所有网卡的IP地址"""
+    ips = ["127.0.0.1"]
+    try:
+        # 获取所有网卡信息
+        for info in socket.getaddrinfo(socket.gethostname(), None):
+            ip = info[4][0]
+            if ip not in ips:
+                ips.append(ip)
+    except:
+        pass
+    # 补充一种常用的获取局域网IP的方法
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ips.append(s.getsockname()[0])
+        s.close()
+    except:
+        pass
+    return list(set(ips))
+
+# 启动时自动将本机所有IP加入特权列表
+SUPER_IPS.extend(get_all_local_ips())
 
 if not os.path.exists(SHARED_FOLDER):
     os.makedirs(SHARED_FOLDER)
@@ -40,8 +65,8 @@ init_db()
 def is_super_admin():
     """检查是否为特权IP"""
     client_ip = request.remote_addr
-    # 处理本地回环地址的多种表示
-    return client_ip == SUPER_IP or client_ip == "127.0.0.1"
+    # 检查客户端IP是否在特权列表中
+    return client_ip in SUPER_IPS
 
 def get_current_permissions():
     """获取当前用户的权限列表"""
