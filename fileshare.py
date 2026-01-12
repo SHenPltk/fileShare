@@ -39,44 +39,31 @@ if not os.path.exists(SHARED_FOLDER):
 
 def init_db():
     with sqlite3.connect(DB_PATH) as conn:
-        # 用户表
         conn.execute('''CREATE TABLE IF NOT EXISTS users 
                      (id INTEGER PRIMARY KEY AUTOINCREMENT, 
                       username TEXT UNIQUE NOT NULL, 
                       password TEXT NOT NULL, 
                       role TEXT NOT NULL,
                       permissions TEXT NOT NULL)''')
-        # 文件所有权与 ACL 表
         conn.execute('''CREATE TABLE IF NOT EXISTS file_acl 
                      (id INTEGER PRIMARY KEY AUTOINCREMENT, 
                       path TEXT UNIQUE NOT NULL, 
                       owner TEXT NOT NULL,
-                      shared_with TEXT)''') # shared_with 格式: "user1:view,download;user2:view"
+                      shared_with TEXT)''')
 
 init_db()
 
 def is_super_admin():
-    """检查是否为特权IP，且未开启测试模式"""
-    if session.get('test_mode'): return False
+    """只有在 session 中明确标记为 super_admin 时才是超管"""
+    return session.get('is_super_admin') is True
+
+def can_access_super_privilege():
+    """检查当前 IP 是否有资格申请超管权限"""
     return request.remote_addr in SUPER_IPS
 
-def get_local_ip():
-    """获取本机局域网IP"""
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    try:
-        s.connect(("8.8.8.8", 80))
-        ip = s.getsockname()[0]
-    except Exception:
-        ip = "127.0.0.1"
-    finally:
-        s.close()
-    return ip
-
 def get_file_permissions(path, username):
-    """获取特定用户对特定文件的权限"""
     if is_super_admin(): return ["view", "download", "upload", "manage"]
     
-    # 规范化路径
     rel_path = os.path.relpath(safe_join(SHARED_FOLDER, path), SHARED_FOLDER).replace("\\", "/")
     if rel_path == ".": rel_path = ""
 
@@ -84,14 +71,14 @@ def get_file_permissions(path, username):
         conn.row_factory = sqlite3.Row
         acl = conn.execute("SELECT * FROM file_acl WHERE path = ?", (rel_path,)).fetchone()
         
-        # 如果是所有者，拥有所有权限
+        # 所有者拥有所有权限
         if acl and acl["owner"] == username:
             return ["view", "download", "upload", "manage"]
         
-        # 检查全局用户权限作为基础
+        # 基础权限
         user_perms = session.get("permissions", "").split(",")
         
-        # 检查特定文件的共享权限 (ACL)
+        # ACL 覆盖
         if acl and acl["shared_with"]:
             for entry in acl["shared_with"].split(";"):
                 if ":" in entry:
@@ -129,57 +116,51 @@ def register():
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
-    # 只有在非测试模式下，超管才自动跳转
-    if is_super_admin(): return redirect(url_for("index"))
-    
     if request.method == "POST":
         username, password = request.form.get("username"), request.form.get("password")
         with sqlite3.connect(DB_PATH) as conn:
             conn.row_factory = sqlite3.Row
             user = conn.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
         if user and check_password_hash(user["password"], password):
-            session.update({"user": user["username"], "role": user["role"], "permissions": user["permissions"]})
+            session.update({"user": user["username"], "role": user["role"], "permissions": user["permissions"], "is_super_admin": False})
             return redirect(url_for("index"))
-        return render_template("login.html", error="用户名或密码错误")
-    return render_template("login.html")
+        return render_template("login.html", error="用户名或密码错误", can_super=can_access_super_privilege())
+    return render_template("login.html", can_super=can_access_super_privilege())
+
+@app.route("/super_login")
+def super_login():
+    """本机特权登录入口"""
+    if can_access_super_privilege():
+        session.clear()
+        session["is_super_admin"] = True
+        session["user"] = "SuperAdmin"
+        session["role"] = "admin"
+        session["permissions"] = "view,download,upload,manage"
+        return redirect(url_for("index"))
+    abort(403)
 
 @app.route("/logout")
 def logout():
-    # 退出登录时不清除 test_mode，确保留在登录页
-    test_mode = session.get('test_mode')
     session.clear()
-    if test_mode: session['test_mode'] = True
     return redirect(url_for("login"))
 
 @app.route("/delete_account", methods=["POST"])
 @login_required
 def delete_account():
     username = session.get("user")
-    if not username: return "Not logged in", 401
+    if not username or is_super_admin(): return "Forbidden", 403
     with sqlite3.connect(DB_PATH) as conn:
         conn.execute("DELETE FROM users WHERE username = ?", (username,))
     session.clear()
     return "OK", 200
-
-@app.route("/enter_test_mode")
-def enter_test_mode():
-    session.clear()
-    session['test_mode'] = True
-    return redirect(url_for("login"))
-
-@app.route("/exit_test_mode")
-def exit_test_mode():
-    session.clear() # 完全清除，包括 test_mode
-    return redirect(url_for("index"))
 
 @app.route("/", methods=["GET"])
 @app.route("/view/", methods=["GET"])
 @app.route("/view/<path:subpath>", methods=["GET"])
 @login_required
 def index(subpath=""):
-    username = session.get("user", "SuperAdmin" if is_super_admin() else "Guest")
+    username = session.get("user")
     perms = get_file_permissions(subpath, username)
-    
     if "view" not in perms: abort(403)
     
     full_path = safe_join(SHARED_FOLDER, subpath)
@@ -190,34 +171,55 @@ def index(subpath=""):
         item_rel = os.path.relpath(os.path.join(full_path, name), SHARED_FOLDER).replace("\\", "/")
         item_perms = get_file_permissions(item_rel, username)
         if "view" in item_perms:
-            items.append({
-                "name": name,
-                "is_dir": os.path.isdir(os.path.join(full_path, name)),
-                "rel_path": item_rel,
-                "perms": item_perms
-            })
+            items.append({"name": name, "is_dir": os.path.isdir(os.path.join(full_path, name)), "rel_path": item_rel, "perms": item_perms})
             
     items.sort(key=lambda x: (not x["is_dir"], x["name"].lower()))
     path_parts = [p for p in subpath.split("/") if p]
     breadcrumbs = [{"name": part, "path": "/".join(path_parts[:i+1])} for i, part in enumerate(path_parts)]
     
-    return render_template("index.html", items=items, ip=get_local_ip(), current_path=subpath, breadcrumbs=breadcrumbs, 
-                           user=username, is_super=is_super_admin(), perms=perms, test_mode=session.get('test_mode'))
+    return render_template("index.html", items=items, ip=socket.gethostbyname(socket.gethostname()), current_path=subpath, breadcrumbs=breadcrumbs, 
+                           user=username, is_super=is_super_admin(), perms=perms)
+
+@app.route("/get_file_acl", methods=["GET"])
+@login_required
+def get_file_acl():
+    path = request.args.get("path")
+    username = session.get("user")
+    if "manage" not in get_file_permissions(path, username): abort(403)
+    
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.row_factory = sqlite3.Row
+        acl = conn.execute("SELECT * FROM file_acl WHERE path = ?", (path,)).fetchone()
+        users = conn.execute("SELECT username FROM users").fetchall()
+        
+    return jsonify({
+        "owner": acl["owner"] if acl else "Unknown",
+        "shared_with": acl["shared_with"] if acl else "",
+        "all_users": [u["username"] for u in users]
+    })
+
+@app.route("/update_file_acl", methods=["POST"])
+@login_required
+def update_file_acl():
+    data = request.get_json()
+    path, shared_with = data.get("path"), data.get("shared_with")
+    if "manage" not in get_file_permissions(path, session.get("user")): abort(403)
+    
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute("UPDATE file_acl SET shared_with = ? WHERE path = ?", (shared_with, path))
+    return "OK", 200
 
 @app.route("/upload", methods=["POST"])
 @login_required
 def upload_file():
-    username = session.get("user", "SuperAdmin")
+    username = session.get("user")
     subpath = request.form.get("path", "")
     if "upload" not in get_file_permissions(subpath, username): abort(403)
-    
     file = request.files["file"]
     rel_name = request.form.get("webkitRelativePath", "") or file.filename
     target_path = safe_join(SHARED_FOLDER, subpath, rel_name)
     os.makedirs(os.path.dirname(target_path), exist_ok=True)
     file.save(target_path)
-    
-    # 记录所有权
     rel_db_path = os.path.relpath(target_path, SHARED_FOLDER).replace("\\", "/")
     with sqlite3.connect(DB_PATH) as conn:
         conn.execute("INSERT OR REPLACE INTO file_acl (path, owner) VALUES (?, ?)", (rel_db_path, username))
@@ -226,7 +228,7 @@ def upload_file():
 @app.route("/download/<path:filename>", methods=["GET"])
 @login_required
 def download_item(filename):
-    if "download" not in get_file_permissions(filename, session.get("user", "SuperAdmin")): abort(403)
+    if "download" not in get_file_permissions(filename, session.get("user")): abort(403)
     full_path = safe_join(SHARED_FOLDER, filename)
     if os.path.isdir(full_path):
         memory_file = io.BytesIO()
@@ -242,26 +244,23 @@ def download_item(filename):
 @app.route("/delete", methods=["POST"])
 @login_required
 def delete_items():
-    username = session.get("user", "SuperAdmin")
+    username = session.get("user")
     for path in request.get_json().get("paths", []):
         if "manage" in get_file_permissions(path, username):
             full_path = safe_join(SHARED_FOLDER, path)
             if os.path.exists(full_path):
                 if os.path.isdir(full_path): shutil.rmtree(full_path)
                 else: os.remove(full_path)
-                with sqlite3.connect(DB_PATH) as conn:
-                    conn.execute("DELETE FROM file_acl WHERE path = ?", (path,))
+                with sqlite3.connect(DB_PATH) as conn: conn.execute("DELETE FROM file_acl WHERE path = ?", (path,))
     return "OK", 200
 
 @app.route("/fs_op", methods=["POST"])
 @login_required
 def file_system_operation():
-    username = session.get("user", "SuperAdmin")
+    username = session.get("user")
     data = request.get_json()
     op, src_paths, dest_dir = data.get("op"), data.get("src_paths", []), data.get("dest_dir", "")
-    
     if "manage" not in get_file_permissions(dest_dir, username): abort(403)
-    
     try:
         with sqlite3.connect(DB_PATH) as conn:
             if op == 'rename':
@@ -273,8 +272,7 @@ def file_system_operation():
             elif op in ['move', 'copy']:
                 for path in src_paths:
                     if "manage" not in get_file_permissions(path, username): continue
-                    src = safe_join(SHARED_FOLDER, path)
-                    dest_rel = os.path.join(dest_dir, os.path.basename(path)).replace("\\", "/")
+                    src, dest_rel = safe_join(SHARED_FOLDER, path), os.path.join(dest_dir, os.path.basename(path)).replace("\\", "/")
                     dest = safe_join(SHARED_FOLDER, dest_rel)
                     if src == dest: continue
                     if op == 'move':
@@ -290,15 +288,13 @@ def file_system_operation():
 @app.route("/mkdir", methods=["POST"])
 @login_required
 def make_directory():
-    username = session.get("user", "SuperAdmin")
+    username = session.get("user")
     data = request.get_json()
     parent = data.get("path", "")
     if "upload" not in get_file_permissions(parent, username): abort(403)
-    
     new_dir_rel = os.path.join(parent, data.get("dirname", "")).replace("\\", "/")
     os.makedirs(safe_join(SHARED_FOLDER, new_dir_rel), exist_ok=True)
-    with sqlite3.connect(DB_PATH) as conn:
-        conn.execute("INSERT OR REPLACE INTO file_acl (path, owner) VALUES (?, ?)", (new_dir_rel, username))
+    with sqlite3.connect(DB_PATH) as conn: conn.execute("INSERT OR REPLACE INTO file_acl (path, owner) VALUES (?, ?)", (new_dir_rel, username))
     return "OK", 200
 
 @app.route("/admin/users", methods=["GET"])
