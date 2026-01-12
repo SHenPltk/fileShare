@@ -60,6 +60,18 @@ def is_super_admin():
     if session.get('test_mode'): return False
     return request.remote_addr in SUPER_IPS
 
+def get_local_ip():
+    """获取本机局域网IP"""
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+    except Exception:
+        ip = "127.0.0.1"
+    finally:
+        s.close()
+    return ip
+
 def get_file_permissions(path, username):
     """获取特定用户对特定文件的权限"""
     if is_super_admin(): return ["view", "download", "upload", "manage"]
