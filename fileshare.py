@@ -45,33 +45,24 @@ def init_db():
                       password TEXT NOT NULL, 
                       role TEXT NOT NULL,
                       permissions TEXT NOT NULL)''')
-        # 移除默认管理员创建逻辑，仅保留表结构初始化
 
 init_db()
 
 def is_super_admin():
-    """检查是否为特权IP，且未开启测试模式"""
-    # 如果 URL 中包含 test_mode=1，则暂时禁用 IP 特权，方便本机测试登录逻辑
     if request.args.get('test_mode') == '1' or session.get('test_mode'):
-        if request.args.get('test_mode') == '1':
-            session['test_mode'] = True
+        if request.args.get('test_mode') == '1': session['test_mode'] = True
         return False
-    
-    client_ip = request.remote_addr
-    return client_ip in SUPER_IPS
+    return request.remote_addr in SUPER_IPS
 
 def get_current_permissions():
-    if is_super_admin():
-        return ["view", "download", "upload", "manage", "admin_panel"]
-    if "user" in session:
-        return session.get("permissions", "").split(",")
+    if is_super_admin(): return ["view", "download", "upload", "manage", "admin_panel"]
+    if "user" in session: return session.get("permissions", "").split(",")
     return []
 
 def login_required(f):
     @functools.wraps(f)
     def decorated_function(*args, **kwargs):
-        if not is_super_admin() and "user" not in session:
-            return redirect(url_for("login"))
+        if not is_super_admin() and "user" not in session: return redirect(url_for("login"))
         return f(*args, **kwargs)
     return decorated_function
 
@@ -80,21 +71,10 @@ def permission_required(permission):
         @functools.wraps(f)
         def decorated_function(*args, **kwargs):
             if is_super_admin(): return f(*args, **kwargs)
-            perms = get_current_permissions()
-            if permission not in perms:
-                return abort(403, description=f"Missing permission: {permission}")
+            if permission not in get_current_permissions(): abort(403)
             return f(*args, **kwargs)
         return decorated_function
     return decorator
-
-def get_local_ip():
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    try:
-        s.connect(("8.8.8.8", 80))
-        ip = s.getsockname()[0]
-    except Exception: ip = "127.0.0.1"
-    finally: s.close()
-    return ip
 
 def safe_join(base, *paths):
     joined = os.path.normpath(os.path.join(base, *paths))
@@ -105,17 +85,13 @@ def safe_join(base, *paths):
 def register():
     if request.method == "POST":
         username, password = request.form.get("username"), request.form.get("password")
-        if not username or not password:
-            return render_template("register.html", error="请填写完整信息")
-        hashed_pw = generate_password_hash(password)
+        if not username or not password: return render_template("register.html", error="请填写完整信息")
         try:
             with sqlite3.connect(DB_PATH) as conn:
-                # 新注册用户默认只有 view 权限，无 download/upload/manage
                 conn.execute("INSERT INTO users (username, password, role, permissions) VALUES (?, ?, ?, ?)",
-                             (username, hashed_pw, "user", "view"))
+                             (username, generate_password_hash(password), "user", "view"))
             return redirect(url_for("login"))
-        except sqlite3.IntegrityError:
-            return render_template("register.html", error="用户名已存在")
+        except sqlite3.IntegrityError: return render_template("register.html", error="用户名已存在")
     return render_template("register.html")
 
 @app.route("/login", methods=["GET", "POST"])
@@ -127,7 +103,7 @@ def login():
             conn.row_factory = sqlite3.Row
             user = conn.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
         if user and check_password_hash(user["password"], password):
-            session["user"], session["role"], session["permissions"] = user["username"], user["role"], user["permissions"]
+            session.update({"user": user["username"], "role": user["role"], "permissions": user["permissions"]})
             return redirect(url_for("index"))
         return render_template("login.html", error="用户名或密码错误")
     return render_template("login.html")
@@ -137,9 +113,19 @@ def logout():
     session.clear()
     return redirect(url_for("login"))
 
+@app.route("/delete_account", methods=["POST"])
+@login_required
+def delete_account():
+    """用户注销自己的账号"""
+    username = session.get("user")
+    if not username: abort(403)
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute("DELETE FROM users WHERE username = ?", (username,))
+    session.clear()
+    return "OK", 200
+
 @app.route("/exit_test_mode")
 def exit_test_mode():
-    """退出测试模式，恢复 IP 特权"""
     session.pop('test_mode', None)
     return redirect(url_for("index"))
 
@@ -150,16 +136,34 @@ def admin_users():
     with sqlite3.connect(DB_PATH) as conn:
         conn.row_factory = sqlite3.Row
         users = conn.execute("SELECT id, username, role, permissions FROM users").fetchall()
-    return render_template("admin.html", users=users, is_super=is_super_admin())
+    return render_template("admin.html", users=users, is_super=is_super_admin(), current_role=session.get("role", "user"))
 
-@app.route("/admin/update_perms", methods=["POST"])
+@app.route("/admin/update_user", methods=["POST"])
 @login_required
 @permission_required("manage")
-def update_perms():
+def update_user():
     data = request.get_json()
-    user_id, new_perms = data.get("id"), ",".join(data.get("permissions", []))
+    user_id, new_role, new_perms = data.get("id"), data.get("role"), ",".join(data.get("permissions", []))
+    
+    # 权限检查：非超管不能修改管理员
     with sqlite3.connect(DB_PATH) as conn:
-        conn.execute("UPDATE users SET permissions = ? WHERE id = ?", (new_perms, user_id))
+        conn.row_factory = sqlite3.Row
+        target = conn.execute("SELECT role FROM users WHERE id = ?", (user_id,)).fetchone()
+        if not is_super_admin() and target["role"] == "admin": abort(403)
+        conn.execute("UPDATE users SET role = ?, permissions = ? WHERE id = ?", (new_role, new_perms, user_id))
+    return "OK", 200
+
+@app.route("/admin/delete_user", methods=["POST"])
+@login_required
+@permission_required("manage")
+def delete_user():
+    user_id = request.get_json().get("id")
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.row_factory = sqlite3.Row
+        target = conn.execute("SELECT role FROM users WHERE id = ?", (user_id,)).fetchone()
+        # 权限检查：非超管不能删除管理员
+        if not is_super_admin() and target["role"] == "admin": abort(403)
+        conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
     return "OK", 200
 
 @app.route("/", methods=["GET"])
@@ -177,7 +181,7 @@ def index(subpath=""):
     items.sort(key=lambda x: (not x["is_dir"], x["name"].lower()))
     path_parts = [p for p in subpath.split("/") if p]
     breadcrumbs = [{"name": part, "path": "/".join(path_parts[:i+1])} for i, part in enumerate(path_parts)]
-    return render_template("index.html", items=items, ip=get_local_ip(), current_path=subpath, breadcrumbs=breadcrumbs, 
+    return render_template("index.html", items=items, ip=socket.gethostbyname(socket.gethostname()), current_path=subpath, breadcrumbs=breadcrumbs, 
                            user="SuperAdmin" if is_super_admin() else session.get("user"), is_super=is_super_admin(), 
                            perms=get_current_permissions(), test_mode=session.get('test_mode'))
 

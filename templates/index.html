@@ -73,6 +73,7 @@
                     <a href="/admin/users" class="btn btn-outline" style="padding: 4px 10px; font-size: 12px;">⚙️ 用户管理</a>
                 {% endif %}
                 {% if not is_super %}
+                    <button onclick="deleteMyAccount()" class="btn" style="padding: 4px 10px; font-size: 12px; background: #fff0f0; color: #d93025; border: 1px solid #ffdada; margin-right: 5px;">注销账号</button>
                     <a href="/logout" class="btn btn-danger" style="padding: 4px 10px; font-size: 12px; background: #f0f2f5; color: #65676b;">退出登录</a>
                 {% endif %}
             </div>
@@ -415,14 +416,23 @@
         }
 
         async function createNewFolder() {
-            const name = prompt("文件夹名称:");
-            if (!name) return;
+            const dirname = prompt("请输入文件夹名称:");
+            if (!dirname) return;
             const res = await fetch('/mkdir', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ path: currentPath, dirname: name })
+                body: JSON.stringify({ path: '{{ current_path }}', dirname: dirname })
             });
             if (res.ok) window.location.reload();
+        }
+
+        async function deleteMyAccount() {
+            if (!confirm("警告：注销账号将永久删除您的用户信息。确定要继续吗？")) return;
+            const res = await fetch('/delete_account', { method: 'POST' });
+            if (res.ok) {
+                alert("账号已注销");
+                window.location.href = "/login";
+            }
         }
     </script>
 </body>
