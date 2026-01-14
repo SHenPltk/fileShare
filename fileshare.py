@@ -141,6 +141,22 @@ def super_login():
 
 @app.route("/logout")
 def logout():
+    test_mode = session.get('test_mode')
+    session.clear()
+    if test_mode:
+        session['test_mode'] = True # 保持测试模式状态
+    return redirect(url_for("login"))
+
+@app.route("/enter_test_mode")
+def enter_test_mode():
+    if can_access_super_privilege():
+        session.clear()
+        session['test_mode'] = True
+        return redirect(url_for("login"))
+    abort(403)
+
+@app.route("/exit_test_mode")
+def exit_test_mode():
     session.clear()
     return redirect(url_for("login"))
 
@@ -178,7 +194,7 @@ def index(subpath=""):
     breadcrumbs = [{"name": part, "path": "/".join(path_parts[:i+1])} for i, part in enumerate(path_parts)]
     
     return render_template("index.html", items=items, ip=socket.gethostbyname(socket.gethostname()), current_path=subpath, breadcrumbs=breadcrumbs, 
-                           user=username, is_super=is_super_admin(), perms=perms)
+                           user=username, is_super=is_super_admin(), perms=perms, test_mode=session.get('test_mode'))
 
 @app.route("/get_file_acl", methods=["GET"])
 @login_required

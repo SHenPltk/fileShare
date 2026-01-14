@@ -6,9 +6,15 @@ __pycache__/
 venv/
 ENV/
 
+# Database
+users.db
+
 # App specific
-shared_files/
+shared_files/*
+!shared_files/.gitkeep
 
 # OS
 .DS_Store
 Thumbs.db
+.vscode/
+.idea/
