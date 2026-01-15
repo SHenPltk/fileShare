@@ -5,11 +5,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
-        :root { --primary: #1877f2; --bg: #f0f2f5; --text: #1c1e21; --danger: #d93025; }
+        :root { --primary: #1877f2; --bg: #f0f2f5; --text: #1c1e21; --danger: #d93025; --selected: #e7f3ff; }
         .modal { display: none; position: fixed; z-index: 2000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); }
         .modal-content { background: white; margin: 10% auto; padding: 20px; border-radius: 12px; width: 80%; max-width: 500px; }
         .acl-user-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid #eee; }
-        .acl-perms { display: flex; gap: 10px; }-selected: #e7f3ff; }
+        .acl-perms { display: flex; gap: 10px; }
         body { font-family: 'Segoe UI', system-ui, sans-serif; margin: 0; padding: 20px; background: var(--bg); color: var(--text); user-select: none; }
         .container { max-width: 1000px; margin: 0 auto; background: white; padding: 25px; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
         
@@ -59,6 +59,16 @@
         
         .shortcut-tip { text-align: center; font-size: 0.8em; color: #8a8d91; margin-top: 15px; }
         kbd { background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 3px; padding: 1px 4px; font-size: 0.9em; }
+
+        .chat-section { margin-top: 25px; }
+        .chat-title { font-size: 1em; margin: 0 0 8px; display: flex; align-items: center; gap: 6px; }
+        .chat-messages { border: 1px solid #e4e6eb; border-radius: 8px; padding: 10px 12px; height: 220px; overflow-y: auto; background: #f8f9fa; font-size: 0.85em; }
+        .chat-message { margin-bottom: 6px; word-break: break-word; }
+        .chat-meta { color: #8a8d91; margin-right: 6px; }
+        .chat-input-row { display: flex; gap: 8px; margin-top: 8px; }
+        .chat-input-row input { flex-grow: 1; padding: 8px 10px; border-radius: 6px; border: 1px solid #ced4da; font-size: 0.9em; box-sizing: border-box; }
+        .chat-actions { margin-top: 8px; display: flex; gap: 8px; }
+        .chat-revoke { margin-left: 6px; font-size: 0.75em; color: #d93025; background: none; border: none; cursor: pointer; padding: 0; }
     </style>
 </head>
 <body>
@@ -187,6 +197,22 @@
         <div class="shortcut-tip">
             快捷键: <kbd>Ctrl+A</kbd> 全选 | <kbd>Esc</kbd> 取消 | <kbd>F2</kbd> 重命名 | <kbd>Ctrl+C</kbd> 复制 | <kbd>Ctrl+X</kbd> 剪切 | <kbd>Ctrl+V</kbd> 粘贴 | <kbd>Del</kbd> 删除
         </div>
+
+        <div class="chat-section">
+            <h2 class="chat-title">💬 局域网聊天（纯文本）</h2>
+            <div id="chat-messages" class="chat-messages"></div>
+            <div class="chat-input-row">
+                <input id="chat-input" type="text" placeholder="输入消息，按回车发送" maxlength="2000">
+                <button class="btn btn-primary" id="chat-send-btn">发送</button>
+            </div>
+            <div style="font-size: 0.75em; color: #8a8d91; margin-top: 4px;">
+                消息以纯文本形式在本机保存，通过 HTTP 在局域网内同步。
+            </div>
+            <div class="chat-actions">
+                <button class="btn btn-outline" id="chat-export-btn">导出聊天记录</button>
+                <button class="btn btn-danger" id="chat-clear-btn" style="display: none;">清屏</button>
+            </div>
+        </div>
     </div>
 
     <!-- 权限设置弹窗 -->
@@ -206,8 +232,14 @@
 
     <script>
         const currentPath = "{{ current_path }}";
+        const currentUser = "{{ user }}";
+        const userPermissions = "{{ user_perms }}";
+        const userRole = "{{ user_role }}";
+        const isSuper = "{{ 'true' if is_super else 'false' }}" === 'true';
         let clipboard = JSON.parse(localStorage.getItem('fs_clipboard') || '{"op":null,"paths":[]}');
         let pendingFiles = [];
+        let lastChatId = 0;
+        let chatTimer = null;
 
         if (clipboard.op) showClipboardBar();
 
@@ -460,6 +492,134 @@
             }
         }
 
+        const chatMessagesEl = document.getElementById('chat-messages');
+        const chatInputEl = document.getElementById('chat-input');
+        const chatSendBtn = document.getElementById('chat-send-btn');
+        const chatExportBtn = document.getElementById('chat-export-btn');
+        const chatClearBtn = document.getElementById('chat-clear-btn');
+        const userPermList = userPermissions ? userPermissions.split(',') : [];
+        const hasChat = userPermList.indexOf('chat') !== -1 || isSuper;
+        const hasChatManage = userPermList.indexOf('chat_manage') !== -1 || userRole === 'admin' || isSuper;
+
+        async function fetchChatMessages(initial) {
+            if (!chatMessagesEl) return;
+            const params = lastChatId && !initial ? `?since_id=${lastChatId}` : '';
+            const res = await fetch(`/chat/messages${params}`);
+            if (!res.ok) return;
+            const data = await res.json();
+            if (!Array.isArray(data) || data.length === 0) return;
+            data.forEach(msg => {
+                if (typeof msg.id === 'number' && msg.id > lastChatId) lastChatId = msg.id;
+                const row = document.createElement('div');
+                row.className = 'chat-message';
+                row.dataset.id = msg.id;
+                row.dataset.user = msg.user;
+                const meta = document.createElement('span');
+                meta.className = 'chat-meta';
+                const timeText = msg.time ? String(msg.time).slice(5, 16) : '';
+                meta.textContent = `[${timeText}] ${msg.user}:`;
+                const text = document.createElement('span');
+                text.textContent = msg.content;
+                row.appendChild(meta);
+                row.appendChild(text);
+                if (canRevokeMessage(msg.user)) {
+                    const btn = document.createElement('button');
+                    btn.className = 'chat-revoke';
+                    btn.textContent = '撤回';
+                    btn.addEventListener('click', () => revokeChatMessage(msg.id, row));
+                    row.appendChild(btn);
+                }
+                chatMessagesEl.appendChild(row);
+            });
+            chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
+        }
+
+        async function sendChatMessage() {
+            if (!chatInputEl || !chatSendBtn) return;
+            const content = chatInputEl.value.trim();
+            if (!content) return;
+            chatSendBtn.disabled = true;
+            try {
+                const res = await fetch('/chat/send', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ content })
+                });
+                if (res.ok) {
+                    chatInputEl.value = '';
+                    const msg = await res.json();
+                    await fetchChatMessages(false);
+                }
+            } finally {
+                chatSendBtn.disabled = false;
+                chatInputEl.focus();
+            }
+        }
+
+        function canRevokeMessage(msgUser) {
+            if (!currentUser) return false;
+            if (msgUser === currentUser) return true;
+            if (hasChatManage) return true;
+            return false;
+        }
+
+        async function revokeChatMessage(id, row) {
+            if (!confirm('确定撤回此消息吗？')) return;
+            const res = await fetch('/chat/revoke', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id })
+            });
+            if (res.ok) {
+                row.remove();
+            } else {
+                alert('撤回失败');
+            }
+        }
+
+        if (chatSendBtn && chatInputEl) {
+            if (!hasChat) {
+                chatInputEl.disabled = true;
+                chatInputEl.placeholder = "您已被禁言";
+                chatSendBtn.disabled = true;
+                chatSendBtn.textContent = "已禁言";
+            }
+            chatSendBtn.addEventListener('click', sendChatMessage);
+            chatInputEl.addEventListener('keydown', e => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    sendChatMessage();
+                }
+            });
+            fetchChatMessages(true);
+            chatTimer = setInterval(() => fetchChatMessages(false), 3000);
+        }
+
+        if (chatExportBtn) {
+            chatExportBtn.addEventListener('click', () => {
+                const a = document.createElement('a');
+                a.href = '/chat/export';
+                a.download = '';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+            });
+        }
+
+        if (chatClearBtn && hasChatManage) {
+            chatClearBtn.style.display = 'inline-flex';
+            chatClearBtn.addEventListener('click', async () => {
+                if (!confirm('确定要清屏吗？这只会隐藏历史消息，本地仍会保留记录。')) return;
+                const res = await fetch('/chat/clear', { method: 'POST' });
+                if (res.ok) {
+                    chatMessagesEl.innerHTML = '';
+                    lastChatId = 0;
+                } else {
+                    alert('清屏失败');
+                }
+            });
+        }
+
         let currentAclPath = '';
         async function openAclModal(path) {
             currentAclPath = path;
@@ -473,22 +633,28 @@
             const sharedMap = {};
             if (data.shared_with) {
                 data.shared_with.split(';').forEach(entry => {
-                    const [u, p] = entry.split(':');
-                    sharedMap[u] = p.split(',');
+                    const parts = entry.split(':');
+                    if (parts.length === 2) {
+                        const u = parts[0];
+                        const p = parts[1];
+                        sharedMap[u] = p.split(',');
+                    }
                 });
             }
 
-            data.all_users.forEach(username => {
-                if (username === data.owner) return; // 所有者不显示，默认全权限
+            data.all_users.forEach(info => {
+                const username = info.username;
+                if (username === data.owner) return;
                 const userPerms = sharedMap[username] || [];
+                const canEdit = info.can_edit;
                 const row = document.createElement('div');
                 row.className = 'acl-user-row';
                 row.innerHTML = `
                     <span>${username}</span>
                     <div class="acl-perms" data-user="${username}">
-                        <label><input type="checkbox" value="view" ${userPerms.includes('view') ? 'checked' : ''}>看</label>
-                        <label><input type="checkbox" value="download" ${userPerms.includes('download') ? 'checked' : ''}>下</label>
-                        <label><input type="checkbox" value="manage" ${userPerms.includes('manage') ? 'checked' : ''}>管</label>
+                        <label><input type="checkbox" value="view" ${userPerms.includes('view') ? 'checked' : ''} ${canEdit ? '' : 'disabled'}>看</label>
+                        <label><input type="checkbox" value="download" ${userPerms.includes('download') ? 'checked' : ''} ${canEdit ? '' : 'disabled'}>下</label>
+                        <label><input type="checkbox" value="manage" ${userPerms.includes('manage') ? 'checked' : ''} ${canEdit ? '' : 'disabled'}>管</label>
                     </div>
                 `;
                 list.appendChild(row);

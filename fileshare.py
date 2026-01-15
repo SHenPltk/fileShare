@@ -50,8 +50,36 @@ def init_db():
                       path TEXT UNIQUE NOT NULL, 
                       owner TEXT NOT NULL,
                       shared_with TEXT)''')
+        conn.execute('''CREATE TABLE IF NOT EXISTS chat_messages 
+                     (id INTEGER PRIMARY KEY AUTOINCREMENT, 
+                      username TEXT NOT NULL, 
+                      content TEXT NOT NULL, 
+                      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                      is_deleted INTEGER NOT NULL DEFAULT 0)''')
+        try:
+            conn.execute("ALTER TABLE chat_messages ADD COLUMN is_deleted INTEGER NOT NULL DEFAULT 0")
+        except sqlite3.OperationalError:
+            pass
 
 init_db()
+
+with sqlite3.connect(DB_PATH) as _conn:
+    _conn.row_factory = sqlite3.Row
+    row = _conn.execute("SELECT MAX(id) AS max_id FROM chat_messages").fetchone()
+    CHAT_BASELINE_ID = row["max_id"] or 0
+
+def get_current_user_record():
+    username = session.get("user")
+    if not username:
+        return {"username": None, "role": session.get("role", "user"), "permissions": session.get("permissions", "")}
+    if session.get("is_super_admin"):
+        return {"username": "SuperAdmin", "role": "admin", "permissions": "upload,chat,chat_manage"}
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.row_factory = sqlite3.Row
+        row = conn.execute("SELECT username, role, permissions FROM users WHERE username = ?", (username,)).fetchone()
+    if row:
+        return {"username": row["username"], "role": row["role"], "permissions": row["permissions"] or ""}
+    return {"username": username, "role": session.get("role", "user"), "permissions": session.get("permissions", "")}
 
 def is_super_admin():
     """只有在 session 中明确标记为 super_admin 时才是超管"""
@@ -62,31 +90,33 @@ def can_access_super_privilege():
     return request.remote_addr in SUPER_IPS
 
 def get_file_permissions(path, username):
-    if is_super_admin(): return ["view", "download", "upload", "manage"]
-    
+    if is_super_admin():
+        return ["view", "download", "upload", "manage"]
     rel_path = os.path.relpath(safe_join(SHARED_FOLDER, path), SHARED_FOLDER).replace("\\", "/")
     if rel_path == ".": rel_path = ""
-
     with sqlite3.connect(DB_PATH) as conn:
         conn.row_factory = sqlite3.Row
         acl = conn.execute("SELECT * FROM file_acl WHERE path = ?", (rel_path,)).fetchone()
-        
-        # 所有者拥有所有权限
+        perms = set()
+        role = session.get("role", "user")
         if acl and acl["owner"] == username:
-            return ["view", "download", "upload", "manage"]
-        
-        # 基础权限
-        user_perms = session.get("permissions", "").split(",")
-        
-        # ACL 覆盖
+            perms.update(["view", "download", "upload", "manage"])
+        if role == "admin":
+            perms.update(["view", "download", "upload", "manage"])
         if acl and acl["shared_with"]:
             for entry in acl["shared_with"].split(";"):
                 if ":" in entry:
-                    u, p = entry.split(":")
+                    u, p = entry.split(":", 1)
                     if u == username:
-                        return list(set(user_perms + p.split(",")))
-        
-        return user_perms
+                        for item in p.split(","):
+                            if item:
+                                perms.add(item)
+        user_perms = set([p for p in session.get("permissions", "").split(",") if p])
+        if "upload" in user_perms:
+            perms.add("upload")
+        if rel_path == "":
+            perms.add("view")
+        return list(perms)
 
 def login_required(f):
     @functools.wraps(f)
@@ -109,9 +139,10 @@ def register():
         try:
             with sqlite3.connect(DB_PATH) as conn:
                 conn.execute("INSERT INTO users (username, password, role, permissions) VALUES (?, ?, ?, ?)",
-                             (username, generate_password_hash(password), "user", "view"))
+                             (username, generate_password_hash(password), "user", "chat"))
             return redirect(url_for("login"))
-        except sqlite3.IntegrityError: return render_template("register.html", error="用户名已存在")
+        except sqlite3.IntegrityError:
+            return render_template("register.html", error="用户名已存在")
     return render_template("register.html")
 
 @app.route("/login", methods=["GET", "POST"])
@@ -135,7 +166,7 @@ def super_login():
         session["is_super_admin"] = True
         session["user"] = "SuperAdmin"
         session["role"] = "admin"
-        session["permissions"] = "view,download,upload,manage"
+        session["permissions"] = "upload,chat,chat_manage"
         return redirect(url_for("index"))
     abort(403)
 
@@ -175,7 +206,8 @@ def delete_account():
 @app.route("/view/<path:subpath>", methods=["GET"])
 @login_required
 def index(subpath=""):
-    username = session.get("user")
+    user_rec = get_current_user_record()
+    username = user_rec["username"]
     perms = get_file_permissions(subpath, username)
     if "view" not in perms: abort(403)
     
@@ -193,8 +225,156 @@ def index(subpath=""):
     path_parts = [p for p in subpath.split("/") if p]
     breadcrumbs = [{"name": part, "path": "/".join(path_parts[:i+1])} for i, part in enumerate(path_parts)]
     
-    return render_template("index.html", items=items, ip=socket.gethostbyname(socket.gethostname()), current_path=subpath, breadcrumbs=breadcrumbs, 
-                           user=username, is_super=is_super_admin(), perms=perms, test_mode=session.get('test_mode'))
+    return render_template(
+        "index.html",
+        items=items,
+        ip=socket.gethostbyname(socket.gethostname()),
+        current_path=subpath,
+        breadcrumbs=breadcrumbs,
+        user=username,
+        is_super=is_super_admin(),
+        perms=perms,
+        test_mode=session.get("test_mode"),
+        user_perms=user_rec["permissions"],
+        user_role=user_rec["role"],
+    )
+
+@app.route("/chat/messages", methods=["GET"])
+@login_required
+def get_chat_messages():
+    since_id = request.args.get("since_id", type=int)
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.row_factory = sqlite3.Row
+        base = CHAT_BASELINE_ID
+        if since_id:
+            rows = conn.execute(
+                "SELECT id, username, content, created_at FROM chat_messages WHERE is_deleted = 0 AND id > ? AND id > ? ORDER BY id ASC",
+                (since_id, base),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT id, username, content, created_at FROM chat_messages WHERE is_deleted = 0 AND id > ? ORDER BY id ASC",
+                (base,),
+            ).fetchall()
+    return jsonify(
+        [
+            {
+                "id": row["id"],
+                "user": row["username"],
+                "content": row["content"],
+                "time": row["created_at"],
+            }
+            for row in rows
+        ]
+    )
+
+@app.route("/chat/send", methods=["POST"])
+@login_required
+def send_chat_message():
+    data = request.get_json() or {}
+    content = (data.get("content") or "").strip()
+    if not content:
+        return "Empty", 400
+    if len(content) > 2000:
+        content = content[:2000]
+    user_rec = get_current_user_record()
+    username = user_rec["username"] or "SuperAdmin"
+    user_perms = set([p for p in (user_rec["permissions"] or "").split(",") if p])
+    if not is_super_admin() and "chat" not in user_perms:
+        abort(403)
+    with sqlite3.connect(DB_PATH) as conn:
+        cur = conn.execute(
+            "INSERT INTO chat_messages (username, content) VALUES (?, ?)",
+            (username, content),
+        )
+        msg_id = cur.lastrowid
+        conn.row_factory = sqlite3.Row
+        row = conn.execute(
+            "SELECT id, username, content, created_at FROM chat_messages WHERE id = ?",
+            (msg_id,),
+        ).fetchone()
+    return jsonify(
+        {
+            "id": row["id"],
+            "user": row["username"],
+            "content": row["content"],
+            "time": row["created_at"],
+        }
+    )
+
+@app.route("/chat/revoke", methods=["POST"])
+@login_required
+def revoke_chat_message():
+    data = request.get_json() or {}
+    msg_id = data.get("id")
+    if not isinstance(msg_id, int):
+        abort(400)
+    current_user = session.get("user")
+    user_rec = get_current_user_record()
+    user_perms = set([p for p in (user_rec["permissions"] or "").split(",") if p])
+    has_chat_manage = "chat_manage" in user_perms or user_rec["role"] == "admin" or is_super_admin()
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.row_factory = sqlite3.Row
+        row = conn.execute("SELECT id, username FROM chat_messages WHERE id = ?", (msg_id,)).fetchone()
+        if not row:
+            return "Not found", 404
+        author = row["username"]
+        if is_super_admin():
+            allowed = True
+        elif author == current_user:
+            allowed = True
+        elif has_chat_manage:
+            if author == "SuperAdmin":
+                author_has_manage = True
+            else:
+                author_row = conn.execute("SELECT role, permissions FROM users WHERE username = ?", (author,)).fetchone()
+                if not author_row:
+                    author_has_manage = False
+                else:
+                    author_perms = set([p for p in (author_row["permissions"] or "").split(",") if p])
+                    author_has_manage = "chat_manage" in author_perms or author_row["role"] == "admin"
+            allowed = not author_has_manage
+        else:
+            allowed = False
+        if not allowed:
+            abort(403)
+        conn.execute("UPDATE chat_messages SET is_deleted = 1 WHERE id = ?", (msg_id,))
+    return "OK", 200
+
+@app.route("/chat/clear", methods=["POST"])
+@login_required
+def clear_chat_screen():
+    global CHAT_BASELINE_ID
+    user_rec = get_current_user_record()
+    user_perms = set([p for p in (user_rec["permissions"] or "").split(",") if p])
+    if not is_super_admin() and "chat_manage" not in user_perms and user_rec["role"] != "admin":
+        abort(403)
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.row_factory = sqlite3.Row
+        row = conn.execute("SELECT MAX(id) AS max_id FROM chat_messages").fetchone()
+        CHAT_BASELINE_ID = row["max_id"] or CHAT_BASELINE_ID
+    return "OK", 200
+
+@app.route("/chat/export", methods=["GET"])
+@login_required
+def export_chat():
+    user_rec = get_current_user_record()
+    user_perms = set([p for p in (user_rec["permissions"] or "").split(",") if p])
+    if not is_super_admin() and "chat_manage" not in user_perms and user_rec["role"] != "admin":
+        abort(403)
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute(
+            "SELECT id, username, content, created_at FROM chat_messages WHERE is_deleted = 0 ORDER BY id ASC"
+        ).fetchall()
+    lines = []
+    for row in rows:
+        time_str = str(row["created_at"])
+        lines.append(f"[{time_str}] {row['username']}: {row['content']}")
+    data = "\n".join(lines).encode("utf-8")
+    memory_file = io.BytesIO(data)
+    memory_file.seek(0)
+    return send_file(memory_file, as_attachment=True, download_name="chat_history.txt", mimetype="text/plain; charset=utf-8")
 
 @app.route("/get_file_acl", methods=["GET"])
 @login_required
@@ -206,12 +386,23 @@ def get_file_acl():
     with sqlite3.connect(DB_PATH) as conn:
         conn.row_factory = sqlite3.Row
         acl = conn.execute("SELECT * FROM file_acl WHERE path = ?", (path,)).fetchone()
-        users = conn.execute("SELECT username FROM users").fetchall()
+        users = conn.execute("SELECT username, role FROM users").fetchall()
+    current_role = session.get("role", "user")
+    owner_name = acl["owner"] if acl else "Unknown"
+    result_users = []
+    for u in users:
+        can_edit = True
+        if not is_super_admin():
+            if u["username"] == owner_name:
+                can_edit = False
+            elif current_role == "admin" and u["role"] == "admin":
+                can_edit = False
+        result_users.append({"username": u["username"], "role": u["role"], "can_edit": can_edit})
         
     return jsonify({
-        "owner": acl["owner"] if acl else "Unknown",
+        "owner": owner_name,
         "shared_with": acl["shared_with"] if acl else "",
-        "all_users": [u["username"] for u in users]
+        "all_users": result_users
     })
 
 @app.route("/update_file_acl", methods=["POST"])
@@ -221,8 +412,48 @@ def update_file_acl():
     path, shared_with = data.get("path"), data.get("shared_with")
     if "manage" not in get_file_permissions(path, session.get("user")): abort(403)
     
+    editor = session.get("user")
     with sqlite3.connect(DB_PATH) as conn:
-        conn.execute("UPDATE file_acl SET shared_with = ? WHERE path = ?", (shared_with, path))
+        conn.row_factory = sqlite3.Row
+        acl = conn.execute("SELECT * FROM file_acl WHERE path = ?", (path,)).fetchone()
+        owner_name = acl["owner"] if acl else None
+        raw = acl["shared_with"] if acl else ""
+        current_map = {}
+        if raw:
+            for entry in raw.split(";"):
+                if ":" in entry:
+                    u, p = entry.split(":", 1)
+                    current_map[u] = set([i for i in p.split(",") if i])
+        new_map = {}
+        if shared_with:
+            for entry in shared_with.split(";"):
+                if ":" in entry:
+                    u, p = entry.split(":", 1)
+                    new_map[u] = set([i for i in p.split(",") if i])
+        is_super = is_super_admin()
+        can_edit_manage = False
+        if is_super:
+            can_edit_manage = True
+        elif owner_name and editor == owner_name:
+            can_edit_manage = True
+        if can_edit_manage:
+            final_map = new_map
+        else:
+            final_map = {}
+            for user, perms in new_map.items():
+                base = current_map.get(user, set())
+                merged = set(perms)
+                if "manage" in base:
+                    merged.add("manage")
+                else:
+                    merged.discard("manage")
+                final_map[user] = merged
+        parts = []
+        for user, perms in final_map.items():
+            if perms:
+                parts.append(user + ":" + ",".join(sorted(perms)))
+        stored = ";".join(parts)
+        conn.execute("UPDATE file_acl SET shared_with = ? WHERE path = ?", (stored, path))
     return "OK", 200
 
 @app.route("/upload", methods=["POST"])
@@ -327,7 +558,13 @@ def admin_users():
 def update_user():
     if not is_super_admin() and session.get("role") != "admin": abort(403)
     data = request.get_json()
-    user_id, new_role, new_perms = data.get("id"), data.get("role"), ",".join(data.get("permissions", []))
+    user_id, new_role = data.get("id"), data.get("role")
+    perms_list = data.get("permissions", [])
+    filtered = []
+    for p in perms_list:
+        if p in ("upload", "chat", "chat_manage"):
+            filtered.append(p)
+    new_perms = ",".join(filtered)
     with sqlite3.connect(DB_PATH) as conn:
         conn.row_factory = sqlite3.Row
         target = conn.execute("SELECT role FROM users WHERE id = ?", (user_id,)).fetchone()

@@ -59,10 +59,9 @@
                     </td>
                     <td>
                         {% set p_list = user.permissions.split(',') %}
-                        <label class="perm-label"><input type="checkbox" value="view" {{ 'checked' if 'view' in p_list }} {{ 'disabled' if not can_manage }}>查看</label>
-                        <label class="perm-label"><input type="checkbox" value="download" {{ 'checked' if 'download' in p_list }} {{ 'disabled' if not can_manage }}>下载</label>
                         <label class="perm-label"><input type="checkbox" value="upload" {{ 'checked' if 'upload' in p_list }} {{ 'disabled' if not can_manage }}>上传</label>
-                        <label class="perm-label"><input type="checkbox" value="manage" {{ 'checked' if 'manage' in p_list }} {{ 'disabled' if not can_manage }}>管理</label>
+                        <label class="perm-label"><input type="checkbox" value="chat" {{ 'checked' if 'chat' in p_list }} {{ 'disabled' if not can_manage }}>聊天</label>
+                        <label class="perm-label"><input type="checkbox" value="chat_manage" {{ 'checked' if 'chat_manage' in p_list }} {{ 'disabled' if not can_manage }}>聊天管理</label>
                     </td>
                     <td>
                         <button class="btn btn-save" onclick="saveUser(this)" {{ 'disabled' if not can_manage }}>保存</button>
